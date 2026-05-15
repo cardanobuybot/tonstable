@@ -109,6 +109,13 @@ message(0x544E5310) BridgeMintRequest {
     deadline:   Int as uint64;
 }
 
+message(0x544E5311) BridgeRedeemRequest {
+    nonce:         Int as uint64;         // ← первым, для bounced<>
+    userTon:       Address;
+    tonstblBurned: Int as uint128;
+    deadline:      Int as uint64;
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  СТРУКТУРЫ
@@ -438,11 +445,189 @@ contract TonstableMinter with Deployable, OwnableTransferable {
 
 
     receive(msg: JettonBurnNotification) {
-        // TODO итерация 4: redeem flow
+        // Verify the sender is the legitimate JettonWallet for msg.owner
+        require(sender() == self._walletAddress(msg.owner), "minter: invalid wallet");
+        require(msg.amount > 0, "minter: zero burn");
+
+        let nonce: Int = self.nextNonce;
+        self.nextNonce = nonce + 1;
+
+        self.pendingRedeems.set(nonce, PendingRedeem{
+            user:          msg.owner,
+            tonstblBurned: msg.amount,
+            createdAt:     now(),
+        });
+        self.totalSupply = self.totalSupply - msg.amount;
+
+        send(SendParameters{
+            to:     self.bridgeAdapter,
+            value:  0,
+            bounce: true,
+            mode:   SendRemainingValue,
+            body:   BridgeRedeemRequest{
+                nonce:         nonce,
+                userTon:       msg.owner,
+                tonstblBurned: msg.amount,
+                deadline:      now() + self.pendingTimeout,
+            }.toCell(),
+        });
+
+        emit(beginCell()
+            .storeUint(0x544E5306, 32)
+            .storeUint(nonce, 64)
+            .storeAddress(msg.owner)
+            .storeCoins(msg.amount)
+            .endCell());
     }
-    receive(msg: RedeemPayout)  { /* TODO итерация 4 */ }
-    receive(msg: RedeemFailure) { /* TODO итерация 4 */ }
-    receive(msg: CancelPending) { /* TODO итерация 5 */ }
+
+    bounced(msg: bounced<BridgeRedeemRequest>) {
+        let p: PendingRedeem? = self.pendingRedeems.get(msg.nonce);
+        if (p == null) { return; }
+        let redeem: PendingRedeem = p!!;
+
+        self.pendingRedeems.del(msg.nonce);
+        self.totalSupply = self.totalSupply + redeem.tonstblBurned;
+
+        // Re-mint the burned tokens so the user doesn't lose them
+        let walletInit: StateInit = self.walletInitOf(redeem.user);
+        send(SendParameters{
+            to:     contractAddress(walletInit),
+            value:  self.internalMintReserve,
+            bounce: false,
+            mode:   SendPayGasSeparately,
+            body:   JettonTransferInternal{
+                queryId:             msg.nonce,
+                amount:              redeem.tonstblBurned,
+                from:                myAddress(),
+                responseDestination: redeem.user,
+                forwardAmount:       0,
+                forwardPayload:      emptySlice(),
+            }.toCell(),
+            code:   walletInit.code,
+            data:   walletInit.data,
+        });
+
+        emit(beginCell()
+            .storeUint(0x544E53F2, 32)
+            .storeUint(msg.nonce, 64)
+            .storeCoins(redeem.tonstblBurned)
+            .endCell());
+    }
+
+    receive(msg: RedeemPayout) {
+        require(sender() == self.bridgeAdapter, "minter: bridge only");
+
+        let p: PendingRedeem? = self.pendingRedeems.get(msg.nonce);
+        require(p != null, "minter: unknown nonce");
+        let redeem: PendingRedeem = p!!;
+
+        self.pendingRedeems.del(msg.nonce);
+
+        // Forward the TON payout (attached by the bridge) to the user
+        send(SendParameters{
+            to:     redeem.user,
+            value:  0,
+            bounce: false,
+            mode:   SendRemainingValue + SendIgnoreErrors,
+            body:   "TONSTBL: redeem confirmed".asComment(),
+        });
+
+        emit(beginCell()
+            .storeUint(0x544E5304, 32)
+            .storeUint(msg.nonce, 64)
+            .storeAddress(redeem.user)
+            .storeCoins(redeem.tonstblBurned)
+            .storeUint(msg.arbTxHash, 256)
+            .endCell());
+    }
+
+    receive(msg: RedeemFailure) {
+        require(sender() == self.bridgeAdapter, "minter: bridge only");
+
+        let p: PendingRedeem? = self.pendingRedeems.get(msg.nonce);
+        require(p != null, "minter: unknown nonce");
+        let redeem: PendingRedeem = p!!;
+
+        self.pendingRedeems.del(msg.nonce);
+        self.totalSupply = self.totalSupply + redeem.tonstblBurned;
+
+        // Re-mint the burned tokens back to the user's wallet
+        let walletInit: StateInit = self.walletInitOf(redeem.user);
+        send(SendParameters{
+            to:     contractAddress(walletInit),
+            value:  self.internalMintReserve,
+            bounce: false,
+            mode:   SendPayGasSeparately,
+            body:   JettonTransferInternal{
+                queryId:             msg.nonce,
+                amount:              redeem.tonstblBurned,
+                from:                myAddress(),
+                responseDestination: redeem.user,
+                forwardAmount:       0,
+                forwardPayload:      emptySlice(),
+            }.toCell(),
+            code:   walletInit.code,
+            data:   walletInit.data,
+        });
+
+        emit(beginCell()
+            .storeUint(0x544E5305, 32)
+            .storeUint(msg.nonce, 64)
+            .storeAddress(redeem.user)
+            .storeCoins(redeem.tonstblBurned)
+            .storeUint(msg.reasonCode, 8)
+            .endCell());
+    }
+
+    receive(msg: CancelPending) {
+        self.requireOwner();
+
+        // Check pending mints first
+        let pm: PendingMint? = self.pendingMints.get(msg.nonce);
+        if (pm != null) {
+            let mint: PendingMint = pm!!;
+            require(now() >= mint.createdAt + self.pendingTimeout, "minter: not timed out");
+            self.pendingMints.del(msg.nonce);
+            // Best-effort refund from Minter reserves; if bridge funds are stuck
+            // at the adapter, the Minter may not have enough — SendIgnoreErrors
+            // prevents a revert but the refund may be partial.
+            send(SendParameters{
+                to:     mint.user,
+                value:  mint.tonNet,
+                bounce: false,
+                mode:   SendPayGasSeparately + SendIgnoreErrors,
+                body:   "TONSTBL: pending mint cancelled (timeout)".asComment(),
+            });
+            return;
+        }
+
+        // Then check pending redeems
+        let pr: PendingRedeem? = self.pendingRedeems.get(msg.nonce);
+        require(pr != null, "minter: nonce not found");
+        let redeem: PendingRedeem = pr!!;
+        require(now() >= redeem.createdAt + self.pendingTimeout, "minter: not timed out");
+
+        self.pendingRedeems.del(msg.nonce);
+        self.totalSupply = self.totalSupply + redeem.tonstblBurned;
+
+        let walletInit: StateInit = self.walletInitOf(redeem.user);
+        send(SendParameters{
+            to:     contractAddress(walletInit),
+            value:  self.internalMintReserve,
+            bounce: false,
+            mode:   SendPayGasSeparately,
+            body:   JettonTransferInternal{
+                queryId:             msg.nonce,
+                amount:              redeem.tonstblBurned,
+                from:                myAddress(),
+                responseDestination: redeem.user,
+                forwardAmount:       0,
+                forwardPayload:      emptySlice(),
+            }.toCell(),
+            code:   walletInit.code,
+            data:   walletInit.data,
+        });
+    }
 
 
     get fun get_jetton_data(): JettonMasterData {

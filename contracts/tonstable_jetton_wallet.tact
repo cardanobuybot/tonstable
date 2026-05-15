@@ -169,22 +169,63 @@ contract TonstableJettonWallet with Deployable {
     // ═════════════════════════════════════════════════════════════════════════
 
     receive(msg: JettonTransfer) {
-        // TODO итерация 4:
-        //   - require sender() == self.owner
-        //   - require self.balance >= msg.amount
-        //   - self.balance -= msg.amount
-        //   - вычислить адрес destination's wallet
-        //   - отправить JettonTransferInternal туда с init (auto-deploy)
-        require(false, "wallet: transfer not implemented in iteration 3");
+        let ctx: Context = context();
+        require(ctx.sender == self.owner, "wallet: sender is not owner");
+        require(self.balance >= msg.amount, "wallet: insufficient balance");
+        // Enough gas must cover: our processing + destination processing + forward notification
+        require(ctx.value > msg.forwardAmount + 2 * WALLET_GAS_CONSUMPTION,
+                "wallet: insufficient gas for transfer");
+
+        self.balance -= msg.amount;
+
+        let destInit: StateInit = initOf TonstableJettonWallet(msg.destination, self.master);
+        send(SendParameters{
+            to:     contractAddress(destInit),
+            value:  0,
+            bounce: true,
+            mode:   SendRemainingValue,
+            body:   JettonTransferInternal{
+                queryId:             msg.queryId,
+                amount:              msg.amount,
+                from:                self.owner,
+                responseDestination: msg.responseDestination,
+                forwardAmount:       msg.forwardAmount,
+                forwardPayload:      msg.forwardPayload,
+            }.toCell(),
+            code:   destInit.code,
+            data:   destInit.data,
+        });
+    }
+
+    // Restore balance if destination wallet rejects the transfer
+    bounced(msg: bounced<JettonTransferInternal>) {
+        self.balance += msg.amount;
     }
 
     receive(msg: JettonBurn) {
-        // TODO итерация 4:
-        //   - require sender() == self.owner
-        //   - require self.balance >= msg.amount
-        //   - self.balance -= msg.amount
-        //   - отправить JettonBurnNotification → master (запускает redeem flow)
-        require(false, "wallet: burn not implemented in iteration 3");
+        let ctx: Context = context();
+        require(ctx.sender == self.owner, "wallet: sender is not owner");
+        require(self.balance >= msg.amount, "wallet: insufficient balance");
+
+        self.balance -= msg.amount;
+
+        send(SendParameters{
+            to:     self.master,
+            value:  0,
+            bounce: true,
+            mode:   SendRemainingValue,
+            body:   JettonBurnNotification{
+                queryId:             msg.queryId,
+                amount:              msg.amount,
+                owner:               self.owner,
+                responseDestination: msg.responseDestination,
+            }.toCell(),
+        });
+    }
+
+    // Restore balance if master rejects the burn (e.g., paused)
+    bounced(msg: bounced<JettonBurnNotification>) {
+        self.balance += msg.amount;
     }
 
 

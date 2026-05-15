@@ -26,6 +26,18 @@ message(0x544E5302) MintConfirmation {
     arbTxHash:  Int as uint256;
 }
 
+message(0x544E5311) BridgeRedeemRequest {
+    nonce:         Int as uint64;
+    userTon:       Address;
+    tonstblBurned: Int as uint128;
+    deadline:      Int as uint64;
+}
+
+message(0x544E5304) RedeemPayout {
+    nonce:     Int as uint64;
+    arbTxHash: Int as uint256;
+}
+
 // Fixed mint amount per confirmation: 1,000,000 raw units.
 // At 6-decimal display (TONSTBL_SCALE = 10^6) this shows as 1.000000 TONSTBL,
 // which comfortably passes the 110 % ceiling check against any realistic usdValue.
@@ -44,11 +56,27 @@ contract MockBridgeAdapter with Deployable {
             to:     self.minter,
             value:  0,
             bounce: false,
-            mode:   SendRemainingValue,   // forward all remaining gas to Minter
+            mode:   SendRemainingValue,
             body:   MintConfirmation{
                 nonce:      msg.nonce,
                 actualLusd: MOCK_ACTUAL_LUSD,
-                arbTxHash:  0,            // no real Arbitrum tx on testnet
+                arbTxHash:  0,
+            }.toCell(),
+        });
+    }
+
+    // Absorb the redeem request and immediately confirm the payout.
+    // The remaining gas from the burn chain is forwarded back to the Minter
+    // as the "payout" value; on mainnet the bridge would attach real TON here.
+    receive(msg: BridgeRedeemRequest) {
+        send(SendParameters{
+            to:     self.minter,
+            value:  0,
+            bounce: false,
+            mode:   SendRemainingValue,
+            body:   RedeemPayout{
+                nonce:     msg.nonce,
+                arbTxHash: 0,
             }.toCell(),
         });
     }
