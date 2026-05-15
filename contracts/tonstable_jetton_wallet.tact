@@ -192,7 +192,8 @@ contract TonstableJettonWallet with Deployable {
     //  GETTERS
     // ═════════════════════════════════════════════════════════════════════════
 
-    get fun walletData(): JettonWalletData {
+    // TEP-74 standard getter name — must be exactly "get_wallet_data"
+    get fun get_wallet_data(): JettonWalletData {
         return JettonWalletData{
             balance:    self.balance,
             owner:      self.owner,

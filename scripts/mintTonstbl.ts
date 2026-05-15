@@ -17,7 +17,7 @@
 //                           → MockBridgeAdapter auto-confirms → 1,000,000 units minted
 // ============================================================================
 
-import { toNano, Address } from '@ton/core';
+import { toNano, Address, contractAddress } from '@ton/core';
 import {
     TonstableMinter,
     SetBridgeAdapter,
@@ -25,10 +25,11 @@ import {
     DepositTon,
 } from '../build/TonstableMinter/TonstableMinter_TonstableMinter';
 import { MockBridgeAdapter, Deploy as AdapterDeploy } from '../build/MockBridgeAdapter/MockBridgeAdapter_MockBridgeAdapter';
+import { TonstableJettonWallet } from '../build/TonstableJettonWallet/TonstableJettonWallet_TonstableJettonWallet';
 import { NetworkProvider } from '@ton/blueprint';
 
 // ─── known addresses ──────────────────────────────────────────────────────────
-const MINTER_ADDRESS = Address.parse('EQDDp5bjnJuNP1Au2G5tRfvoBXxM7JP6VzLI6mXN_PTsODpC');
+const MINTER_ADDRESS = Address.parse('EQDzs2UEpA_pM0MGyhFWlmch8nQ_7jBFB3LhRrcJM3-clLQi');
 
 // ─── oracle price ─────────────────────────────────────────────────────────────
 // $100,000 per TON — same as the initial PriceUpdate from the previous attempt.
@@ -42,12 +43,15 @@ const ORACLE_PRICE = 100_000n * 100_000_000n; // = 10_000_000_000_000
 //   net      = 2.0 TON = 2_000_000_000 nanoTON
 //   usdValue = (2e9 × 10_000_000_000_000) / 1e9 = 20_000_000_000_000
 //   check    : 1_000_000 × 100 = 1e8  ≤  20e12 × 1.1 = 22e12  ✓  (trivial)
-//   Wallet balance ~3.5 TON: 2.5 deposit + 0.15 gas headroom fits fine.
 
 export async function run(provider: NetworkProvider) {
-    const minter  = provider.open(TonstableMinter.fromAddress(MINTER_ADDRESS));
-    const sender  = provider.sender();
-    const nowSec  = BigInt(Math.floor(Date.now() / 1000));
+    const minter     = provider.open(TonstableMinter.fromAddress(MINTER_ADDRESS));
+    const sender     = provider.sender();
+    const senderAddr = sender.address!;
+
+    // Compute the JettonWallet address deterministically (same formula as Minter)
+    const walletInit = await TonstableJettonWallet.init(senderAddr, MINTER_ADDRESS);
+    const walletAddr = contractAddress(0, walletInit);
 
     // ── 1. Deploy MockBridgeAdapter ───────────────────────────────────────────
     const adapter = provider.open(await MockBridgeAdapter.fromInit(MINTER_ADDRESS));
@@ -106,8 +110,8 @@ export async function run(provider: NetworkProvider) {
     console.log('\n✓  Mint triggered successfully!');
     console.log('   actualLusd credited : 1,000,000 raw units');
     console.log('   MockBridgeAdapter   :', adapterAddr.toString());
-    console.log('   JettonWallet        : EQA9EcFP5ZaQGSjPna0Uujf_Yqi1qiVZszfeDTMOkaJQuH_b');
+    console.log('   JettonWallet        :', walletAddr.toString());
     console.log('   Minter              :', MINTER_ADDRESS.toString());
-    console.log('\n   Allow ~30 s for inner messages to settle, then check:');
-    console.log('   https://testnet.tonscan.org/address/kQA9EcFP5ZaQGSjPna0Uujf_Yqi1qiVZszfeDTMOkaJQuMRR');
+    console.log('\n   Allow ~30 s for inner messages to settle, then verify:');
+    console.log('   npx ts-node scripts/_verifyMint.ts');
 }
