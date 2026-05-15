@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tact-lang/tact/main/src/config/configSchema.json",
+  "projects": [
+    {
+      "name": "TonstableMinter",
+      "path": "contracts/tonstable_minter.tact",
+      "output": "build/TonstableMinter",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
+    },
+    {
+      "name": "TonstableJettonWallet",
+      "path": "contracts/tonstable_jetton_wallet.tact",
+      "output": "build/TonstableJettonWallet",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
+    }
+  ]
+}
