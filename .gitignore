@@ -21,3 +21,7 @@ Session.vim
 .nvim/
 .emacs/
 .helix/
+
+# Environment / secrets
+.env
+.env.*
