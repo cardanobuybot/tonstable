@@ -20,6 +20,16 @@
         "external": false
       },
       "mode": "full"
+    },
+    {
+      "name": "MockBridgeAdapter",
+      "path": "contracts/mock_bridge_adapter.tact",
+      "output": "build/MockBridgeAdapter",
+      "options": {
+        "debug": false,
+        "external": false
+      },
+      "mode": "full"
     }
   ]
 }
