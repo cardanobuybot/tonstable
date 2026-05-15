@@ -2,7 +2,7 @@ import { TonClient } from '@ton/ton';
 import { Address } from '@ton/core';
 import { TonstableMinter } from '../build/TonstableMinter/TonstableMinter_TonstableMinter';
 
-const NEW_MINTER = Address.parse('EQDzs2UEpA_pM0MGyhFWlmch8nQ_7jBFB3LhRrcJM3-clLQi');
+const NEW_MINTER = Address.parse('EQBxamaMURMxsklbBNinjiMqtaj7nt-iSw6z3bXfrfCC3LaS');
 const USER       = Address.parse('0QAvWnxIIxiQ73MrKzI9_zQCxinF1yO5G7WZ1s7_Yo7lb8dv');
 
 const client = new TonClient({ endpoint: 'https://testnet.toncenter.com/api/v2/jsonRPC' });

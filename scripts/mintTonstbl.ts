@@ -29,7 +29,7 @@ import { TonstableJettonWallet } from '../build/TonstableJettonWallet/TonstableJ
 import { NetworkProvider } from '@ton/blueprint';
 
 // ─── known addresses ──────────────────────────────────────────────────────────
-const MINTER_ADDRESS = Address.parse('EQDzs2UEpA_pM0MGyhFWlmch8nQ_7jBFB3LhRrcJM3-clLQi');
+const MINTER_ADDRESS = Address.parse('EQBxamaMURMxsklbBNinjiMqtaj7nt-iSw6z3bXfrfCC3LaS');
 
 // ─── oracle price ─────────────────────────────────────────────────────────────
 // $100,000 per TON — same as the initial PriceUpdate from the previous attempt.
@@ -38,11 +38,11 @@ const MINTER_ADDRESS = Address.parse('EQDzs2UEpA_pM0MGyhFWlmch8nQ_7jBFB3LhRrcJM3
 // PRICE_DECIMALS = 100_000_000 (i.e. $1 = 100_000_000 price units).
 const ORACLE_PRICE = 100_000n * 100_000_000n; // = 10_000_000_000_000
 
-// ─── ceiling-check verification (actualLusd = 1_000_000, deposit = 2.5 TON) ─
-//   fee      = max(30 bps of 2.5 TON, feeFloor 0.5 TON) = 0.5 TON
-//   net      = 2.0 TON = 2_000_000_000 nanoTON
-//   usdValue = (2e9 × 10_000_000_000_000) / 1e9 = 20_000_000_000_000
-//   check    : 1_000_000 × 100 = 1e8  ≤  20e12 × 1.1 = 22e12  ✓  (trivial)
+// ─── ceiling-check verification (actualLusd = 1_000_000, deposit = 2.0 TON) ─
+//   fee      = max(30 bps of 2.0 TON, feeFloor 0.5 TON) = 0.5 TON
+//   net      = 1.5 TON = 1_500_000_000 nanoTON
+//   usdValue = (1.5e9 × 10_000_000_000_000) / 1e9 = 15_000_000_000_000
+//   check    : 1_000_000 × 100 = 1e8  ≤  15e12 × 1.1 = 16.5e12  ✓  (trivial)
 
 export async function run(provider: NetworkProvider) {
     const minter     = provider.open(TonstableMinter.fromAddress(MINTER_ADDRESS));
@@ -94,10 +94,10 @@ export async function run(provider: NetworkProvider) {
     // MockBridgeAdapter receives BridgeMintRequest and replies with
     // MintConfirmation(actualLusd = 1_000_000) in the same block.
     // No manual confirmation step needed.
-    console.log('4/4  Depositing 2.5 TON to trigger mint...');
+    console.log('4/4  Depositing 2.0 TON to trigger mint...');
     await minter.send(
         sender,
-        { value: toNano('2.5') },
+        { value: toNano('2.0') },
         {
             $$type:        'DepositTon',
             minTonstblOut: 1_000_000n,
