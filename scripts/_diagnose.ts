@@ -1,6 +1,19 @@
 // Deep diagnostic: trace the mint chain and verify on-chain state
+import * as fs from 'fs';
+import * as path from 'path';
 import { TonClient } from '@ton/ton';
 import { Address, Cell, beginCell } from '@ton/core';
+
+function loadEnv(): Record<string, string> {
+    const envPath = path.resolve(__dirname, '..', '.env');
+    if (!fs.existsSync(envPath)) return {};
+    const env: Record<string, string> = {};
+    for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+        const m = line.match(/^\s*([A-Z_][A-Z_0-9]*)="?([^"#]*)"?\s*$/);
+        if (m) env[m[1]] = m[2].trim();
+    }
+    return env;
+}
 import {
     TonstableMinter,
 } from '../build/TonstableMinter/TonstableMinter_TonstableMinter';
@@ -14,10 +27,10 @@ const USER_ADDR    = Address.parse('0QAvWnxIIxiQ73MrKzI9_zQCxinF1yO5G7WZ1s7_Yo7l
 const KNOWN_WALLET = Address.parse('EQAdd0dSXN5asuj2EVitWslgCQjU13ATYnCU8eJiEz_QIkTW');
 
 async function main() {
-    const client = new TonClient({
-        endpoint: 'https://testnet.toncenter.com/api/v2/jsonRPC',
-        apiKey: '',
-    });
+    const env = { ...loadEnv(), ...process.env };
+    const clientOpts: any = { endpoint: 'https://testnet.toncenter.com/api/v2/jsonRPC' };
+    if (env['TONCENTER_API_KEY']) clientOpts.apiKey = env['TONCENTER_API_KEY'];
+    const client = new TonClient(clientOpts);
 
     // ── 1. What does the Minter say the wallet address should be? ──────────
     console.log('\n=== 1. On-chain wallet address (from Minter getter) ===');
