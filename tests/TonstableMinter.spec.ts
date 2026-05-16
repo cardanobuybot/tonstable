@@ -1,5 +1,5 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { beginCell, toNano } from '@ton/core';
+import { beginCell, Message, toNano } from '@ton/core';
 import {
     TonstableMinter,
     DepositTon,
@@ -9,6 +9,9 @@ import {
     Pause,
     Unpause,
     SetFeeParams,
+    ProposeOwner,
+    AcceptOwnership,
+    CancelOwnerProposal,
 } from '../wrappers/TonstableMinter';
 import { TonstableJettonWallet } from '../wrappers/TonstableJettonWallet';
 import '@ton/test-utils';
@@ -414,6 +417,241 @@ describe('TonstableMinter', () => {
                 to: minter.address,
                 success: false,
             });
+        });
+    });
+
+    describe('two-step ownership transfer', () => {
+        let newOwner: SandboxContract<TreasuryContract>;
+
+        beforeEach(async () => {
+            newOwner = await blockchain.treasury('newOwner');
+        });
+
+        it('owner can propose a new owner — pendingOwner is set', async () => {
+            const result = await minter.send(
+                owner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'ProposeOwner', newOwner: newOwner.address } satisfies ProposeOwner,
+            );
+            expect(result.transactions).toHaveTransaction({
+                from: owner.address,
+                to: minter.address,
+                success: true,
+            });
+            const pending = await minter.getGetPendingOwner();
+            expect(pending?.toString()).toBe(newOwner.address.toString());
+            // owner unchanged until acceptance
+            expect((await minter.getOwner()).toString()).toBe(owner.address.toString());
+        });
+
+        it('non-owner cannot propose', async () => {
+            const result = await minter.send(
+                user.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'ProposeOwner', newOwner: newOwner.address } satisfies ProposeOwner,
+            );
+            expect(result.transactions).toHaveTransaction({
+                from: user.address,
+                to: minter.address,
+                success: false,
+            });
+            expect(await minter.getGetPendingOwner()).toBeNull();
+        });
+
+        it('cannot propose minter itself as new owner', async () => {
+            const result = await minter.send(
+                owner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'ProposeOwner', newOwner: minter.address } satisfies ProposeOwner,
+            );
+            expect(result.transactions).toHaveTransaction({
+                from: owner.address,
+                to: minter.address,
+                success: false,
+            });
+        });
+
+        it('pending owner can accept — owner changes, pendingOwner cleared', async () => {
+            await minter.send(
+                owner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'ProposeOwner', newOwner: newOwner.address } satisfies ProposeOwner,
+            );
+
+            const result = await minter.send(
+                newOwner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'AcceptOwnership' } satisfies AcceptOwnership,
+            );
+            expect(result.transactions).toHaveTransaction({
+                from: newOwner.address,
+                to: minter.address,
+                success: true,
+            });
+            expect((await minter.getOwner()).toString()).toBe(newOwner.address.toString());
+            expect(await minter.getGetPendingOwner()).toBeNull();
+        });
+
+        it('non-pending-owner cannot accept', async () => {
+            await minter.send(
+                owner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'ProposeOwner', newOwner: newOwner.address } satisfies ProposeOwner,
+            );
+
+            const result = await minter.send(
+                user.getSender(),         // wrong address
+                { value: toNano('0.05') },
+                { $$type: 'AcceptOwnership' } satisfies AcceptOwnership,
+            );
+            expect(result.transactions).toHaveTransaction({
+                from: user.address,
+                to: minter.address,
+                success: false,
+            });
+            // owner unchanged
+            expect((await minter.getOwner()).toString()).toBe(owner.address.toString());
+        });
+
+        it('AcceptOwnership fails when no proposal is pending', async () => {
+            const result = await minter.send(
+                newOwner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'AcceptOwnership' } satisfies AcceptOwnership,
+            );
+            expect(result.transactions).toHaveTransaction({
+                from: newOwner.address,
+                to: minter.address,
+                success: false,
+            });
+        });
+
+        it('owner can cancel a pending proposal — pendingOwner cleared', async () => {
+            await minter.send(
+                owner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'ProposeOwner', newOwner: newOwner.address } satisfies ProposeOwner,
+            );
+            expect((await minter.getGetPendingOwner())?.toString()).toBe(newOwner.address.toString());
+
+            const result = await minter.send(
+                owner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'CancelOwnerProposal' } satisfies CancelOwnerProposal,
+            );
+            expect(result.transactions).toHaveTransaction({
+                from: owner.address,
+                to: minter.address,
+                success: true,
+            });
+            expect(await minter.getGetPendingOwner()).toBeNull();
+            // new owner cannot accept after cancellation
+            const rejectResult = await minter.send(
+                newOwner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'AcceptOwnership' } satisfies AcceptOwnership,
+            );
+            expect(rejectResult.transactions).toHaveTransaction({
+                from: newOwner.address,
+                to: minter.address,
+                success: false,
+            });
+        });
+
+        it('non-owner cannot cancel a pending proposal', async () => {
+            await minter.send(
+                owner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'ProposeOwner', newOwner: newOwner.address } satisfies ProposeOwner,
+            );
+
+            const result = await minter.send(
+                user.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'CancelOwnerProposal' } satisfies CancelOwnerProposal,
+            );
+            expect(result.transactions).toHaveTransaction({
+                from: user.address,
+                to: minter.address,
+                success: false,
+            });
+            // proposal still active
+            expect((await minter.getGetPendingOwner())?.toString()).toBe(newOwner.address.toString());
+        });
+
+        it('new owner can re-use admin privileges immediately after acceptance', async () => {
+            await minter.send(
+                owner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'ProposeOwner', newOwner: newOwner.address } satisfies ProposeOwner,
+            );
+            await minter.send(
+                newOwner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'AcceptOwnership' } satisfies AcceptOwnership,
+            );
+
+            // new owner should be able to pause
+            const result = await minter.send(
+                newOwner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'Pause' } satisfies Pause,
+            );
+            expect(result.transactions).toHaveTransaction({
+                from: newOwner.address,
+                to: minter.address,
+                success: true,
+            });
+            expect(await minter.getIsPaused()).toBe(true);
+
+            // old owner must no longer be able to unpause
+            const oldOwnerResult = await minter.send(
+                owner.getSender(),
+                { value: toNano('0.05') },
+                { $$type: 'Unpause' } satisfies Unpause,
+            );
+            expect(oldOwnerResult.transactions).toHaveTransaction({
+                from: owner.address,
+                to: minter.address,
+                success: false,
+            });
+        });
+
+        it('old one-step ChangeOwner (stdlib opcode 0x819dbe99) is rejected — no handler', async () => {
+            // ChangeOwner is no longer handled (OwnableTransferable removed).
+            // The TypeScript wrapper already blocks it at compile time (it's excluded
+            // from the send union type). Here we verify the on-chain behaviour too,
+            // by bypassing the typed wrapper and sending the raw opcode directly.
+            const changeOwnerBody = beginCell()
+                .storeUint(0x819dbe99, 32)   // ChangeOwner opcode
+                .storeUint(0n, 64)            // queryId
+                .storeAddress(newOwner.address)
+                .endCell();
+
+            const msg: Message = {
+                info: {
+                    type:        'internal',
+                    ihrDisabled: true,
+                    bounce:      true,
+                    bounced:     false,
+                    src:         owner.address,
+                    dest:        minter.address,
+                    value:       { coins: toNano('0.05') },
+                    ihrFee:      0n,
+                    forwardFee:  0n,
+                    createdLt:   0n,
+                    createdAt:   0,
+                },
+                body: changeOwnerBody,
+            };
+            const result = await blockchain.sendMessage(msg);
+            expect(result.transactions).toHaveTransaction({
+                from: owner.address,
+                to: minter.address,
+                success: false,
+            });
+            // owner unchanged — one-step hijack impossible
+            expect((await minter.getOwner()).toString()).toBe(owner.address.toString());
         });
     });
 

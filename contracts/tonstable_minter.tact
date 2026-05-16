@@ -20,6 +20,12 @@ import "@stdlib/deploy";
 import "@stdlib/ownable";
 import "./tonstable_jetton_wallet";
 
+// Two-step ownership transfer: current owner proposes, pending owner accepts.
+// This prevents irrecoverable loss of control when migrating to a multisig.
+message ProposeOwner        { newOwner: Address; }
+message AcceptOwnership     { }
+message CancelOwnerProposal { }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  КОНСТАНТЫ
@@ -150,8 +156,9 @@ struct JettonMasterData {
 //  CONTRACT
 // ─────────────────────────────────────────────────────────────────────────────
 
-contract TonstableMinter with Deployable, OwnableTransferable {
+contract TonstableMinter with Deployable, Ownable {
     owner:               Address;
+    pendingOwner:        Address?;
     guardian:            Address;
     bridgeAdapter:       Address;
     oracleKeeper:        Address;
@@ -186,6 +193,7 @@ contract TonstableMinter with Deployable, OwnableTransferable {
         jettonContent: Cell,
     ) {
         self.owner               = owner;
+        self.pendingOwner        = null;
         self.guardian            = guardian;
         self.bridgeAdapter       = bridgeAdapter;
         self.oracleKeeper        = oracleKeeper;
@@ -407,6 +415,29 @@ contract TonstableMinter with Deployable, OwnableTransferable {
         self.cachedTonUsdPriceTs = msg.timestamp;
     }
 
+
+    // ── Two-step ownership transfer ──────────────────────────────────────────
+
+    receive(msg: ProposeOwner) {
+        self.requireOwner();
+        require(msg.newOwner != myAddress(), "ownership: cannot propose self");
+        self.pendingOwner = msg.newOwner;
+    }
+
+    receive(_: AcceptOwnership) {
+        let pending: Address? = self.pendingOwner;
+        require(pending != null, "ownership: no pending proposal");
+        require(sender() == pending!!, "ownership: not pending owner");
+        self.owner        = pending!!;
+        self.pendingOwner = null;
+    }
+
+    receive(_: CancelOwnerProposal) {
+        self.requireOwner();
+        self.pendingOwner = null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     receive(msg: SetFeeParams) {
         self.requireOwner();
@@ -669,4 +700,5 @@ contract TonstableMinter with Deployable, OwnableTransferable {
 
     get fun totalSupplyOf(): Int { return self.totalSupply; }
     get fun isPaused(): Bool { return self.paused; }
+    get fun getPendingOwner(): Address? { return self.pendingOwner; }
 }
