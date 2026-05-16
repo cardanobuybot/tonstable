@@ -94,7 +94,15 @@ async function fetchTonUsd(): Promise<number> {
 function makeWallet(version: string, publicKey: Buffer) {
     switch (version.toLowerCase()) {
         case 'v5r1':
-            return WalletContractV5R1.create({ publicKey, workchain: 0 });
+        case 'w5':
+            // Blueprint uses networkGlobalId=-3 for testnet — must match or the address differs.
+            return WalletContractV5R1.create({
+                publicKey,
+                walletId: {
+                    networkGlobalId: -3,
+                    context: { workchain: 0, subwalletNumber: 0, walletVersion: 'v5r1' },
+                },
+            });
         case 'v4':
         case 'v4r2':
             return WalletContractV4.create({ publicKey, workchain: 0 });
