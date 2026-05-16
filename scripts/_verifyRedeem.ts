@@ -4,7 +4,7 @@ import { Address } from '@ton/core';
 import { TonstableMinter } from '../build/TonstableMinter/TonstableMinter_TonstableMinter';
 import { TonstableJettonWallet } from '../build/TonstableJettonWallet/TonstableJettonWallet_TonstableJettonWallet';
 
-const MINTER_ADDRESS = Address.parse('EQBxamaMURMxsklbBNinjiMqtaj7nt-iSw6z3bXfrfCC3LaS');
+const MINTER_ADDRESS = Address.parse('EQAYNaqE6fdlxo2giEWWQU3QDHyxdN4atT9ixf8fAAy4XWth');
 const USER_ADDRESS   = Address.parse('0QAvWnxIIxiQ73MrKzI9_zQCxinF1yO5G7WZ1s7_Yo7lb8dv');
 
 const client = new TonClient({ endpoint: 'https://testnet.toncenter.com/api/v2/jsonRPC' });

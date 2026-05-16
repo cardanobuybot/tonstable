@@ -29,7 +29,7 @@ import { TonstableJettonWallet } from '../build/TonstableJettonWallet/TonstableJ
 import { NetworkProvider } from '@ton/blueprint';
 
 // ─── known addresses ──────────────────────────────────────────────────────────
-const MINTER_ADDRESS = Address.parse('EQBxamaMURMxsklbBNinjiMqtaj7nt-iSw6z3bXfrfCC3LaS');
+const MINTER_ADDRESS = Address.parse('EQAYNaqE6fdlxo2giEWWQU3QDHyxdN4atT9ixf8fAAy4XWth');
 
 // ─── oracle price ─────────────────────────────────────────────────────────────
 // $100,000 per TON — same as the initial PriceUpdate from the previous attempt.

@@ -21,7 +21,7 @@ import {
 import { NetworkProvider } from '@ton/blueprint';
 
 // ── update this to the current Minter address after each redeploy ──────────
-const MINTER_ADDRESS = Address.parse('EQBxamaMURMxsklbBNinjiMqtaj7nt-iSw6z3bXfrfCC3LaS');
+const MINTER_ADDRESS = Address.parse('EQAYNaqE6fdlxo2giEWWQU3QDHyxdN4atT9ixf8fAAy4XWth');
 
 export async function run(provider: NetworkProvider) {
     const sender     = provider.sender();
