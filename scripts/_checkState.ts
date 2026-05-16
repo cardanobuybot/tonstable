@@ -3,8 +3,8 @@ import { Address } from '@ton/core';
 
 async function main() {
     const client = new TonClient({ endpoint: 'https://testnet.toncenter.com/api/v2/jsonRPC' });
-    const adapter = Address.parse('EQBFN5NGvD5Vgh3mhCePHNO7llLi1m6fCvoWPMpwc_mkKK6M');
-    const minter  = Address.parse('EQDDp5bjnJuNP1Au2G5tRfvoBXxM7JP6VzLI6mXN_PTsODpC');
+    const adapter = Address.parse('EQDEvaMoKgKukFGOQMqZaxaKT0BmYMUmkyj45B6rUbGTXrKp');
+    const minter  = Address.parse('EQAYNaqE6fdlxo2giEWWQU3QDHyxdN4atT9ixf8fAAy4XWth');
 
     for (const [label, addr] of [['MockBridgeAdapter', adapter], ['Minter', minter]] as [string, Address][]) {
         const txs = await client.getTransactions(addr, { limit: 8 });

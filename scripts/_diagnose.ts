@@ -8,10 +8,10 @@ import {
     TonstableJettonWallet,
 } from '../build/TonstableJettonWallet/TonstableJettonWallet_TonstableJettonWallet';
 
-const MINTER_ADDR  = Address.parse('EQDDp5bjnJuNP1Au2G5tRfvoBXxM7JP6VzLI6mXN_PTsODpC');
-const ADAPTER_ADDR = Address.parse('EQBFN5NGvD5Vgh3mhCePHNO7llLi1m6fCvoWPMpwc_mkKK6M');
+const MINTER_ADDR  = Address.parse('EQAYNaqE6fdlxo2giEWWQU3QDHyxdN4atT9ixf8fAAy4XWth');
+const ADAPTER_ADDR = Address.parse('EQDEvaMoKgKukFGOQMqZaxaKT0BmYMUmkyj45B6rUbGTXrKp');
 const USER_ADDR    = Address.parse('0QAvWnxIIxiQ73MrKzI9_zQCxinF1yO5G7WZ1s7_Yo7lb8dv');
-const KNOWN_WALLET = Address.parse('EQA9EcFP5ZaQGSjPna0Uujf_Yqi1qiVZszfeDTMOkaJQuH_b');
+const KNOWN_WALLET = Address.parse('EQAdd0dSXN5asuj2EVitWslgCQjU13ATYnCU8eJiEz_QIkTW');
 
 async function main() {
     const client = new TonClient({
@@ -50,7 +50,7 @@ async function main() {
     try {
         const bal = await wallet.getBalance();
         console.log('balance() =>', bal.toString());
-        const data = await wallet.getWalletData();
+        const data = await wallet.getGetWalletData();
         console.log('walletData.balance =>', data.balance.toString());
         console.log('walletData.owner   =>', data.owner.toString());
         console.log('walletData.jetton  =>', data.jetton.toString());
@@ -116,17 +116,29 @@ async function main() {
         console.log('ERROR:', e.message);
     }
 
-    // ── 7. Check standard TEP-74 getter methodId 0x5B88 = get_wallet_data ─
-    console.log('\n=== 7. TEP-74 standard getter check ===');
-    // TEP-74: get_wallet_data method_id = -4 (in old FunC) or crc16-based
-    // Tact compiled walletData has methodId=103862 (0x19616)
-    // Standard get_wallet_data methodId = 0x5B88 (23432)
-    // Standard get_balance methodId = 0x6EF (?)
-    console.log('Tact compiled walletData methodId  :', 103862, '(0x' + (103862).toString(16) + ')');
-    console.log('Tact compiled balance methodId     :', 104128, '(0x' + (104128).toString(16) + ')');
-    console.log('TEP-74 standard get_wallet_data    : methodId should be derived from name');
-    console.log('Tonviewer looks for "get_wallet_data" — Tact exported "walletData"');
-    console.log('=> This is why tonviewer shows 0 balance even if tokens exist on-chain');
+    // ── 7. Verify TEP-74 standard getter get_wallet_data is callable ──────────
+    console.log('\n=== 7. TEP-74 get_wallet_data live check ===');
+    try {
+        const walletState = await client.getContractState(minterWalletAddr);
+        if (walletState.state !== 'active') {
+            console.log('Wallet not deployed yet — skip getter check');
+        } else {
+            const r = await client.runMethod(minterWalletAddr, 'get_wallet_data', []);
+            const bal    = r.stack.readBigNumber();
+            const owner  = r.stack.readAddress();
+            const jetton = r.stack.readAddress();
+            console.log('balance :', bal.toString());
+            console.log('owner   :', owner.toString());
+            console.log('jetton  :', jetton.toString());
+            if (bal > 0n) {
+                console.log('=> TEP-74 getter OK — tonviewer/tonscan will show correct balance.');
+            } else {
+                console.log('=> balance=0 via standard getter (wallet may not have tokens yet).');
+            }
+        }
+    } catch (e: any) {
+        console.log('ERROR calling get_wallet_data:', e.message);
+    }
 }
 
 main().catch(console.error);
