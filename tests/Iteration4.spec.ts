@@ -332,6 +332,39 @@ describe('Iteration 4 — transfer, burn, redeem', () => {
             });
         });
 
+        it('burn is blocked when minter is paused, wallet balance restored via bounce', async () => {
+            const wallet = await userWallet(user);
+            expect(await wallet.getBalance()).toBe(MINT_AMOUNT);
+            expect(await minter.getTotalSupplyOf()).toBe(MINT_AMOUNT);
+
+            await minter.send(owner.getSender(), { value: toNano('0.05') }, { $$type: 'Pause' });
+            expect(await minter.getIsPaused()).toBe(true);
+
+            const result = await wallet.send(
+                user.getSender(),
+                { value: toNano('0.3') },
+                {
+                    $$type:              'JettonBurn',
+                    queryId:             1n,
+                    amount:              MINT_AMOUNT,
+                    responseDestination: user.address,
+                    customPayload:       null,
+                } satisfies JettonBurn,
+            );
+
+            // Minter rejects the burn notification
+            expect(result.transactions).toHaveTransaction({
+                from: wallet.address,
+                to: minter.address,
+                success: false,
+            });
+
+            // Bounced message restores wallet balance
+            expect(await wallet.getBalance()).toBe(MINT_AMOUNT);
+            // totalSupply unchanged
+            expect(await minter.getTotalSupplyOf()).toBe(MINT_AMOUNT);
+        });
+
         it('RedeemFailure re-mints tokens back to user wallet', async () => {
             const wallet = await userWallet(user);
             await wallet.send(user.getSender(), { value: toNano('0.3') }, {
@@ -370,10 +403,92 @@ describe('Iteration 4 — transfer, burn, redeem', () => {
         });
     });
 
+    // ── Redeem fee ─────────────────────────────────────────────────────────────
+
+    describe('Redeem fee', () => {
+        const MINT_AMOUNT = 5_000_000n;
+
+        beforeEach(async () => {
+            await mintTokens(MINT_AMOUNT);
+        });
+
+        it('charges fee on RedeemPayout — fee floor wins on 100 TON payout', async () => {
+            const wallet = await userWallet(user);
+            await wallet.send(user.getSender(), { value: toNano('0.3') }, {
+                $$type:              'JettonBurn',
+                queryId:             1n,
+                amount:              MINT_AMOUNT,
+                responseDestination: user.address,
+                customPayload:       null,
+            } satisfies JettonBurn);
+
+            const redeemNonce = 1n;
+            // grossPayout = 100 TON
+            // feePct = 100e9 * 30 / 10000 = 0.3 TON
+            // feeFloor = 0.5 TON  → floor wins
+            // netPayout = 99.5 TON
+            const grossPayout = toNano('100');
+            const expectedFee = toNano('0.5');
+            const expectedNet = grossPayout - expectedFee;
+
+            const userBalBefore = await user.getBalance();
+
+            await minter.send(
+                bridgeAdapter.getSender(),
+                { value: grossPayout },
+                { $$type: 'RedeemPayout', nonce: redeemNonce, arbTxHash: 0n } satisfies RedeemPayout,
+            );
+
+            const userBalAfter = await user.getBalance();
+            const received = userBalAfter - userBalBefore;
+
+            // User receives netPayout (tiny gas variance acceptable)
+            expect(received).toBeGreaterThan(toNano('99'));
+            expect(received).toBeLessThanOrEqual(expectedNet);
+        });
+
+        it('does NOT charge fee on RedeemFailure (failure path returns tokens, no TON fee)', async () => {
+            const wallet = await userWallet(user);
+            await wallet.send(user.getSender(), { value: toNano('0.3') }, {
+                $$type:              'JettonBurn',
+                queryId:             1n,
+                amount:              MINT_AMOUNT,
+                responseDestination: user.address,
+                customPayload:       null,
+            } satisfies JettonBurn);
+
+            expect(await minter.getTotalSupplyOf()).toBe(0n);
+            expect(await wallet.getBalance()).toBe(0n);
+
+            const redeemNonce = 1n;
+            const result = await minter.send(
+                bridgeAdapter.getSender(),
+                { value: toNano('0.3') },
+                { $$type: 'RedeemFailure', nonce: redeemNonce, reasonCode: 1n } satisfies RedeemFailure,
+            );
+
+            // Re-mint to wallet — no TON fee deducted
+            expect(result.transactions).toHaveTransaction({
+                from: minter.address,
+                to: wallet.address,
+                success: true,
+            });
+
+            expect(await minter.getTotalSupplyOf()).toBe(MINT_AMOUNT);
+            expect(await wallet.getBalance()).toBe(MINT_AMOUNT);
+
+            // No TON sent to user (tokens re-minted instead)
+            expect(result.transactions).not.toHaveTransaction({
+                from: minter.address,
+                to: user.address,
+            });
+        });
+    });
+
     // ── CancelPending ──────────────────────────────────────────────────────────
 
     describe('CancelPending', () => {
-        it('owner can cancel a timed-out pending mint', async () => {
+        it('owner can cancel a timed-out pending mint (cleanup only, no refund)', async () => {
             // Create a pending mint (nonce=0) — don't confirm it
             await minter.send(user.getSender(), { value: toNano('5') }, {
                 $$type:        'DepositTon',
@@ -394,6 +509,12 @@ describe('Iteration 4 — transfer, burn, redeem', () => {
                 from: owner.address,
                 to: minter.address,
                 success: true,
+            });
+
+            // State cleared — no refund sent to user (deposited TON went to bridge)
+            expect(result.transactions).not.toHaveTransaction({
+                from: minter.address,
+                to: user.address,
             });
         });
 

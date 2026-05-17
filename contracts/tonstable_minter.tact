@@ -476,6 +476,7 @@ contract TonstableMinter with Deployable, Ownable {
 
 
     receive(msg: JettonBurnNotification) {
+        require(!self.paused, "minter: paused");
         // Verify the sender is the legitimate JettonWallet for msg.owner
         require(sender() == self._walletAddress(msg.owner), "minter: invalid wallet");
         require(msg.amount > 0, "minter: zero burn");
@@ -554,12 +555,19 @@ contract TonstableMinter with Deployable, Ownable {
 
         self.pendingRedeems.del(msg.nonce);
 
-        // Forward the TON payout (attached by the bridge) to the user
+        let ctx: Context = context();
+        let grossPayout: Int = ctx.value;
+
+        let feePct: Int = (grossPayout * self.feeBps) / BPS_DENOMINATOR;
+        let fee: Int = feePct > self.feeFloor ? feePct : self.feeFloor;
+        require(grossPayout > fee, "redeem: payout below fee floor");
+        let netPayout: Int = grossPayout - fee;
+
         send(SendParameters{
             to:     redeem.user,
-            value:  0,
+            value:  netPayout,
             bounce: false,
-            mode:   SendRemainingValue + SendIgnoreErrors,
+            mode:   SendPayGasSeparately + SendIgnoreErrors,
             body:   "TONSTBL: redeem confirmed".asComment(),
         });
 
@@ -568,6 +576,7 @@ contract TonstableMinter with Deployable, Ownable {
             .storeUint(msg.nonce, 64)
             .storeAddress(redeem.user)
             .storeCoins(redeem.tonstblBurned)
+            .storeCoins(fee)
             .storeUint(msg.arbTxHash, 256)
             .endCell());
     }
@@ -619,16 +628,15 @@ contract TonstableMinter with Deployable, Ownable {
             let mint: PendingMint = pm!!;
             require(now() >= mint.createdAt + self.pendingTimeout, "minter: not timed out");
             self.pendingMints.del(msg.nonce);
-            // Best-effort refund from Minter reserves; if bridge funds are stuck
-            // at the adapter, the Minter may not have enough — SendIgnoreErrors
-            // prevents a revert but the refund may be partial.
-            send(SendParameters{
-                to:     mint.user,
-                value:  mint.tonNet,
-                bounce: false,
-                mode:   SendPayGasSeparately + SendIgnoreErrors,
-                body:   "TONSTBL: pending mint cancelled (timeout)".asComment(),
-            });
+
+            // Deposited TON already forwarded to the bridge; we cannot refund here.
+            // Real recovery flows through RedeemFailure or bounced<BridgeMintRequest>.
+            emit(beginCell()
+                .storeUint(0x544E53F3, 32)
+                .storeUint(msg.nonce, 64)
+                .storeAddress(mint.user)
+                .storeCoins(mint.tonNet)
+                .endCell());
             return;
         }
 
