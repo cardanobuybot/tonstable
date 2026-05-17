@@ -25,3 +25,11 @@ Session.vim
 # Environment / secrets
 .env
 .env.*
+
+# Private keys and credentials
+*.key
+*.pem
+*.seed
+*.secret
+wallet.json
+keystore/

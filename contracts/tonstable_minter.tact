@@ -48,6 +48,8 @@ const MAX_FEE_BPS:               Int = 100;
 const MAX_FEE_FLOOR:             Int = 5_000_000_000;
 const MAX_PRICE_DEVIATION_PCT:   Int = 50;
 
+const MINIMUM_OPERATIONAL_RESERVE: Int = ton("2");
+
 // Sanity ceiling на actualLusd при MintConfirmation:
 //   реально пришедшее значение НЕ может превышать quote более чем на N%.
 //   Защита от багов Arbitrum-стороны / манипуляции моста. При штатном
@@ -101,6 +103,10 @@ message SetOpReserves     { bridgeForwardGas: Int as coins; internalMintReserve:
 message Pause             { }
 message Unpause           { }
 message CancelPending     { nonce: Int as uint64; }
+
+message(0x544E5340) WithdrawFees    { amount: Int as coins; destination: Address; }
+message(0x544E5341) SetPendingTimeout { newTimeout: Int as uint32; }
+message(0x544E5342) SetMinDeposit   { newMin: Int as coins; }
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -421,20 +427,41 @@ contract TonstableMinter with Deployable, Ownable {
     receive(msg: ProposeOwner) {
         self.requireOwner();
         require(msg.newOwner != myAddress(), "ownership: cannot propose self");
+        let currentOwner: Address = self.owner;
         self.pendingOwner = msg.newOwner;
+        emit(beginCell()
+            .storeUint(0x544E5350, 32)
+            .storeAddress(currentOwner)
+            .storeAddress(msg.newOwner)
+            .endCell());
     }
 
     receive(_: AcceptOwnership) {
         let pending: Address? = self.pendingOwner;
         require(pending != null, "ownership: no pending proposal");
         require(sender() == pending!!, "ownership: not pending owner");
-        self.owner        = pending!!;
+        let oldOwner: Address = self.owner;
+        let newOwner: Address = pending!!;
+        self.owner        = newOwner;
         self.pendingOwner = null;
+        emit(beginCell()
+            .storeUint(0x544E5351, 32)
+            .storeAddress(oldOwner)
+            .storeAddress(newOwner)
+            .endCell());
     }
 
     receive(_: CancelOwnerProposal) {
         self.requireOwner();
+        let cancelled: Address? = self.pendingOwner;
         self.pendingOwner = null;
+        emit(beginCell()
+            .storeUint(0x544E5352, 32)
+            .storeAddress(self.owner)
+            .storeMaybeRef(cancelled != null
+                ? beginCell().storeAddress(cancelled!!).endCell()
+                : null)
+            .endCell());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -473,6 +500,46 @@ contract TonstableMinter with Deployable, Ownable {
         self.paused = true;
     }
     receive(msg: Unpause) { self.requireOwner(); self.paused = false; }
+
+    receive(msg: WithdrawFees) {
+        self.requireOwner();
+        require(!self.paused, "minter: paused");
+        require(myBalance() - msg.amount >= MINIMUM_OPERATIONAL_RESERVE, "withdraw: insufficient reserve");
+        send(SendParameters{
+            to:     msg.destination,
+            value:  msg.amount,
+            bounce: false,
+            mode:   SendPayGasSeparately,
+            body:   "TONSTBL: fee withdrawal".asComment(),
+        });
+        emit(beginCell()
+            .storeUint(0x544E5340, 32)
+            .storeCoins(msg.amount)
+            .storeAddress(msg.destination)
+            .endCell());
+    }
+
+    receive(msg: SetPendingTimeout) {
+        self.requireOwner();
+        require(msg.newTimeout >= 3600, "timeout: min 1 hour");
+        require(msg.newTimeout <= 7 * 24 * 3600, "timeout: max 7 days");
+        self.pendingTimeout = msg.newTimeout;
+        emit(beginCell()
+            .storeUint(0x544E5341, 32)
+            .storeUint(msg.newTimeout, 32)
+            .endCell());
+    }
+
+    receive(msg: SetMinDeposit) {
+        self.requireOwner();
+        require(msg.newMin >= ton("1"), "minDeposit: min 1 TON");
+        require(msg.newMin <= ton("100"), "minDeposit: max 100 TON");
+        self.minDepositTon = msg.newMin;
+        emit(beginCell()
+            .storeUint(0x544E5342, 32)
+            .storeCoins(msg.newMin)
+            .endCell());
+    }
 
 
     receive(msg: JettonBurnNotification) {
