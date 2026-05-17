@@ -1,5 +1,14 @@
 # TONSTABLE — TON-Native Stablecoin Protocol
 
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![Tests](https://img.shields.io/badge/tests-65%20passing-brightgreen)
+![Tact](https://img.shields.io/badge/Tact-1.6-purple)
+![TON](https://img.shields.io/badge/network-TON%20testnet-0098EA)
+![Status](https://img.shields.io/badge/status-beta-orange)
+
+> Overcollateralized TON-native stablecoin backed by LUSD on Arbitrum.
+> Trustless, transparent, audit-ready.
+
 TONSTABLE (TONSTBL) is a cross-chain collateralized stablecoin system that allows users to deposit TON and receive a USD-pegged token on the TON blockchain, backed by LUSD collateral managed on Arbitrum.
 
 ## Table of Contents

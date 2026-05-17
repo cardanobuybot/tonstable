@@ -103,18 +103,26 @@ Collected fees accumulate in the minter contract. The owner can withdraw them vi
 
 LUSD, the collateral asset, is overcollateralized (minimum 110% collateral ratio at Liquity protocol). When TON price falls sharply, the minted LUSD value remains stable, which means the system is naturally over-backed in dollar terms even as TON/USD drops.
 
-The insurance fund operates in three phases:
+Phase transitions are determined by two on-chain metrics computed at every fee event — no owner action required:
 
-**Phase 1 — Growth (normal conditions)**
-Protocol fees accumulate. The fund grows proportionally to volume. Target: 5% of outstanding TONSTBL supply.
+- **`outstanding`** — total TONSTBL supply in USD terms at that moment.
+- **`bufferRatio`** — `insuranceFundBalance / targetBuffer`, where `targetBuffer = max(50,000 USDC, outstanding × 0.05)`.
 
-**Phase 2 — Buffer (high volatility)**
-When the oracle detects sustained TON price decline (>30% in 24h), the circuit breaker is manually activatable by the guardian. New deposits are paused; existing TONSTBL holders can redeem without fee. The fund absorbs any TON shortfall on redemptions.
+| Phase | Trigger condition | Fee split (insurance / owner) |
+|-------|-------------------|-------------------------------|
+| 1 | `outstanding < 10,000 USDC` | 100% / 0% |
+| 2 | `outstanding ≥ 10,000` AND `bufferRatio < 0.50` | 80% / 20% |
+| 3 | `outstanding ≥ 10,000` AND `0.50 ≤ bufferRatio < 1.00` | 50% / 50% |
+| 4 | `bufferRatio ≥ 1.00` | 30% / 70% |
 
-**Phase 3 — Recovery (post-stress)**
-After peg stabilizes, deposits reopen with temporarily elevated fees (up to 100 bps) to rebuild the insurance fund. Phase 3 automatically reverts to Phase 1 when the fund exceeds 5% of supply.
+These transitions occur automatically inside `Vault.sol` when each protocol fee is processed. The current phase and fee distribution are publicly inspectable via `getCurrentPhase()` and `getFeeDistribution()` view functions on the Arbitrum contract.
 
-Phase transitions are currently manual (guardian-controlled). Automated phase transitions based on on-chain price feeds are planned for v2.
+This design eliminates owner discretion over phase transitions entirely:
+- The owner **cannot delay** a transition to extract more fees.
+- The owner **cannot accelerate** a transition to start earning earlier.
+- The owner **cannot pause** transitions during periods of volatility.
+
+The system moves up the phase table as the buffer fills, and drops back immediately if the buffer is drawn down — automatically and without any governance vote.
 
 ### 3.3 Price Oracle
 
