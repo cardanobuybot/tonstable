@@ -58,3 +58,19 @@ cd arbitrum
 forge install
 forge build
 forge test
+
+## Testing
+
+```bash
+# Run all tests
+forge test
+
+# Run with verbosity
+forge test -vvv
+
+# Run specific test
+forge test --match-test test_Mint_HappyPath -vvv
+
+# Gas snapshot
+forge snapshot
+
