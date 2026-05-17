@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -34,6 +35,25 @@ interface ISwapRouter {
  */
 contract TonstableVault is OApp, Ownable2Step, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  OWNERSHIP — explicit override resolution between OApp.Ownable and Ownable2Step
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function transferOwnership(address newOwner)
+        public
+        override(Ownable, Ownable2Step)
+        onlyOwner
+    {
+        Ownable2Step.transferOwnership(newOwner);
+    }
+
+    function _transferOwnership(address newOwner)
+        internal
+        override(Ownable, Ownable2Step)
+    {
+        Ownable2Step._transferOwnership(newOwner);
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     //  CONSTANTS
@@ -312,7 +332,7 @@ contract TonstableVault is OApp, Ownable2Step, Pausable, ReentrancyGuard {
             bytes32 userTon,
             uint128 tonstblBurned,
             uint64 deadline
-        ) = abi.decode(payload, (uint64, bytes32, uint128, uint128));
+        ) = abi.decode(payload, (uint64, bytes32, uint128, uint64));
 
         if (processedNonces[tonEid][nonce]) revert NonceAlreadyProcessed();
         processedNonces[tonEid][nonce] = true;

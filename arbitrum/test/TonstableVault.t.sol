@@ -124,8 +124,24 @@ contract TonstableVaultHarness is TonstableVault {
 
     /// @notice Test helper: directly inject an inbound message
     function harnessReceive(uint32 srcEid, bytes calldata message) external {
-        Origin memory origin = Origin({srcEid: srcEid, sender: bytes32(0), nonce: 0});
-        _lzReceive(origin, bytes32(0), message, address(0), "");
+        this.exposedLzReceive(
+            Origin({srcEid: srcEid, sender: bytes32(0), nonce: 0}),
+            bytes32(0),
+            message,
+            address(0),
+            bytes("")
+        );
+    }
+
+    function exposedLzReceive(
+        Origin calldata origin,
+        bytes32 guid,
+        bytes calldata message,
+        address executor,
+        bytes calldata extraData
+    ) external {
+        require(msg.sender == address(this), "harness only");
+        _lzReceive(origin, guid, message, executor, extraData);
     }
 
     /// @notice Expose internal fee distribution for direct testing
