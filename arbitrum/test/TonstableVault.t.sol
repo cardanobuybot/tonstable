@@ -6,6 +6,7 @@ import {TonstableVault} from "../src/TonstableVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Origin} from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
+import {MessagingParams, MessagingReceipt, MessagingFee} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  MOCK CONTRACTS
@@ -93,13 +94,10 @@ contract MockEndpoint {
     function setDelegate(address) external {}
 
     function send(
-        address,
-        bytes calldata,
-        bytes calldata,
-        bytes calldata,
-        bytes calldata
-    ) external payable returns (bytes32 guid, uint64 nonce, uint256 fee) {
-        return (bytes32(0), 0, 0);
+        MessagingParams calldata /*_params*/,
+        address /*_refundAddress*/
+    ) external payable returns (MessagingReceipt memory receipt) {
+        return MessagingReceipt({guid: bytes32(0), nonce: 0, fee: MessagingFee({nativeFee: 0, lzTokenFee: 0})});
     }
 
     function eid() external pure returns (uint32) {
@@ -201,6 +199,11 @@ contract TonstableVaultTest is Test {
         // Configure swap prices
         router.setPrice(address(usdc), address(lusd), PRICE_USDC_TO_LUSD);
         router.setPrice(address(lusd), address(usdc), PRICE_LUSD_TO_USDC);
+
+        // Register TON-side peer so outgoing LZ messages don't revert
+        bytes32 tonMinterPeer = bytes32(uint256(uint160(address(0xCAFEBABE))));
+        vm.prank(owner);
+        vault.setPeer(TON_EID, tonMinterPeer);
     }
 
     // ═════════════════════════════════════════════════════════════════════════
