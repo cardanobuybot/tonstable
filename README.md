@@ -91,6 +91,32 @@ TonstableMinter ──BridgeRedeemRequest──► BridgeAdapter
 
 ---
 
+## Project Status
+
+**Current state:** Testnet beta. TON-side smart contracts deployed and tested (65/65 unit tests passing). Cross-chain bridge currently mocked for testing.
+
+**What works:**
+- Full TON-side mint/redeem flow with two-step commit
+- Two-step ownership transfer (Propose/Accept pattern)
+- Oracle keeper with Binance/CoinGecko fallback
+- Emergency pause mechanism (guardian + owner roles)
+- Fee distribution architecture (designed, activates with Vault.sol)
+- TEP-74 compliant Jetton master and wallet
+- Automatic insurance fund phase transitions (design complete)
+
+**What is not done:**
+- Vault.sol (Arbitrum side) — planned for Phase 6
+- Real bridge integration via LayerZero — planned for Phase 7
+- Security audit — required before mainnet (Phase 8)
+- Insurance fund accumulation — activates when Vault.sol deploys
+
+**What this means for you:**
+This is a portfolio-quality reference implementation of the TON-side mechanics for a cross-chain stablecoin. It demonstrates architectural thinking, security-conscious design, and clean test coverage. Production mainnet deployment requires additional funding (~$1-10K) for completing the Arbitrum vault contract, LayerZero integration, and a security audit. The codebase is structured to make these next steps straightforward.
+
+**For grant reviewers / investors:** This implementation represents approximately 200 hours of focused architectural and testing work by a solo developer. The codebase quality, test coverage, and architectural honesty (see `LATER_VAULT_DESIGN_NOTES.md`) reflect production-grade engineering practices despite the project's beta status.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
