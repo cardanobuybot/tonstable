@@ -91,3 +91,41 @@ TON_EID=40343
 INITIAL_OWNER=<your_address>
 
 4.Deploy:
+'''bash
+source .env
+forge script script/Deploy.s.sol \
+  --rpc-url https://sepolia-rollup.arbitrum.io/rpc \
+  --broadcast \
+  --verify
+##Mainnet
+##Do not deploy to mainnet without:
+•Completed security audit
+•LayerZero peer configuration with TON •Minter
+•Verified DVN configuration
+•Multisig owner setup
+•Bootstrap capital plan
+##Integration with TON Side
+###After deployment, configure peer relationship:
+'''Solidity
+// On Arbitrum (this vault)
+vault.setPeer(TON_EID, bytes32(uint256(uint160(TON_MINTER_ADDRESS))));
+
+// On TON (Minter contract via admin message)
+// Set bridgeAdapter to point at the LayerZero TON endpoint OApp
+
+## Security Considerations
+### This code is not audited. Before mainnet:
+1. Professional audit covering:
+•LayerZero message handling and replay protection
+•Uniswap V3 swap slippage edge cases
+•Insurance fund accounting integrity
+•Phase transition math
+•Pause/unpause flows
+•Reentrancy across cross-chain message handling
+2. Bug bounty program
+3.Gradual mainnet rollout with hard caps:
+•Max deposit per user
+•Max total outstanding
+•Auto-pause on volatility triggers
+## License
+### MIT — see ../LICENSE
