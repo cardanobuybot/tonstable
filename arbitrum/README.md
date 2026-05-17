@@ -74,3 +74,20 @@ forge test --match-test test_Mint_HappyPath -vvv
 # Gas snapshot
 forge snapshot
 
+##Deployment
+###Testnet (Arbitrum Sepolia)
+1.Get Arbitrum Sepolia ETH from a faucet
+2.Deploy test USDC and LUSD MockERC20 tokens
+3.Configure environment variables in .env:
+
+''' bash
+PRIVATE_KEY=0x...
+ARB_LZ_ENDPOINT=0x6EDCE65403992e310A62460808c4b910D972f10f
+USDC_ADDRESS=<deployed_mock_usdc>
+LUSD_ADDRESS=<deployed_mock_lusd>
+UNISWAP_V3_ROUTER=<test_router_or_mock>
+POOL_FEE=500
+TON_EID=40343
+INITIAL_OWNER=<your_address>
+
+4.Deploy:
