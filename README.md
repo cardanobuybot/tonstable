@@ -1,7 +1,7 @@
 # TONSTABLE — TON-Native Stablecoin Protocol
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Tests](https://img.shields.io/badge/tests-65%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-100%20passing-brightgreen)
 ![Tact](https://img.shields.io/badge/Tact-1.6-purple)
 ![TON](https://img.shields.io/badge/network-TON%20testnet-0098EA)
 ![Status](https://img.shields.io/badge/status-beta-orange)
@@ -32,8 +32,8 @@ The system consists of two layers:
 - `TonstableJettonWallet` — Standard Jetton wallet (TEP-74 / TEP-89) deployed per-user.
 - `MockBridgeAdapter` — Test stub that simulates the Arbitrum bridge for local development.
 
-**Arbitrum Layer (separate repository)**
-- Vault contract that holds ETH/LUSD collateral.
+**Arbitrum Layer (`arbitrum/` folder in this repository)**
+- `TonstableVault.sol` — Vault contract that holds ETH/LUSD collateral with automatic phase-based fee distribution.
 - Bridge listener that processes `BridgeMintRequest` and `BridgeRedeemRequest` messages from TON.
 - Oracle keeper that pushes signed TON/USD prices on-chain.
 
@@ -93,7 +93,7 @@ TonstableMinter ──BridgeRedeemRequest──► BridgeAdapter
 
 ## Project Status
 
-**Current state:** Testnet beta. TON-side smart contracts deployed and tested (65/65 unit tests passing). Cross-chain bridge currently mocked for testing.
+**Current state:** Testnet beta. TON-side smart contracts deployed and tested (65/65 unit tests passing). Arbitrum-side Vault contract implemented and tested (35/35 unit tests passing). Cross-chain bridge currently mocked for testing.
 
 **What works:**
 - Full TON-side mint/redeem flow with two-step commit
@@ -103,17 +103,21 @@ TonstableMinter ──BridgeRedeemRequest──► BridgeAdapter
 - Fee distribution architecture (designed, activates with Vault.sol)
 - TEP-74 compliant Jetton master and wallet
 - Automatic insurance fund phase transitions (design complete)
+- Arbitrum-side Vault contract (`TonstableVault.sol`) — fully implemented
+- Automatic phase-based fee distribution (implemented, not yet active until deployed)
+- 35 Solidity unit tests on Foundry (100% passing)
 
 **What is not done:**
-- Vault.sol (Arbitrum side) — planned for Phase 6
-- Real bridge integration via LayerZero — planned for Phase 7
-- Security audit — required before mainnet (Phase 8)
+- Mainnet deployment of Vault.sol (requires testnet ETH + audit)
+- Real LayerZero peer configuration with TON-side bridge adapter
+- Security audit — required before mainnet
+- Insurance fund bootstrap capital
 - Insurance fund accumulation — activates when Vault.sol deploys
 
 **What this means for you:**
-This is a portfolio-quality reference implementation of the TON-side mechanics for a cross-chain stablecoin. It demonstrates architectural thinking, security-conscious design, and clean test coverage. Production mainnet deployment requires additional funding (~$1-10K) for completing the Arbitrum vault contract, LayerZero integration, and a security audit. The codebase is structured to make these next steps straightforward.
+This is a portfolio-quality reference implementation of the TON-side mechanics for a cross-chain stablecoin. It demonstrates architectural thinking, security-conscious design, and clean test coverage. Production mainnet deployment requires additional funding (~$1-10K) for deploying the Arbitrum vault to testnet, security audit, and LayerZero peer configuration. The codebase is structured to make these next steps straightforward.
 
-**For grant reviewers / investors:** This implementation represents approximately 200 hours of focused architectural and testing work by a solo developer. The codebase quality, test coverage, and architectural honesty (see `LATER_VAULT_DESIGN_NOTES.md`) reflect production-grade engineering practices despite the project's beta status.
+**For grant reviewers / investors:** This implementation represents approximately 200 hours of focused architectural and testing work by a solo developer. The codebase quality, test coverage, and architectural honesty reflect production-grade engineering practices despite the project's beta status.
 
 ---
 
@@ -183,8 +187,9 @@ npx blueprint test -- --testPathPattern Iteration5
 | `TonstableMinter.spec.ts` | Deploy, oracle, deposits, mint/fail, pause, fee params, ownership |
 | `Iteration4.spec.ts` | Jetton transfer, burn, redeem payout/failure, cancel pending |
 | `Iteration5.spec.ts` | Admin functions (WithdrawFees, SetPendingTimeout, SetMinDeposit), ownership events |
+| `arbitrum/test/TonstableVault.t.sol` | Deployment, mint flow, redeem flow, phase transitions, owner revenue, pause, admin, view functions |
 
-Current status: **65 tests, 65 passing**.
+Current status: **100 tests total (65 TON + 35 Arbitrum), all passing**.
 
 ---
 
@@ -215,8 +220,8 @@ Current status: **65 tests, 65 passing**.
 | 3 | TEP-74 compliant Jetton wallet + burn/redeem flow | ✅ Done |
 | 4 | Transfer, redeem fee, CancelPending, ownership transfer | ✅ Done |
 | 5 | Admin functions, ownership events, portfolio prep | ✅ Done |
-| 6 | External security audit | Planned |
-| 7 | Arbitrum Vault + bridge integration | Planned |
+| 6 | External security audit (Arbitrum + TON) | Planned |
+| 7 | Arbitrum Vault + bridge integration | 🟡 Partial — Vault implemented, LayerZero wiring pending testnet ETH |
 | 8 | Mainnet deployment | Planned |
 
 ---

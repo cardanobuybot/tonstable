@@ -1,3 +1,9 @@
+# Historical Design Notes
+
+This file contains pre-implementation design notes for the Arbitrum Vault contract. The actual implementation is in `arbitrum/src/TonstableVault.sol`. Kept for transparency about the design process.
+
+---
+
 # Vault.sol Design Notes — Future Arbitrum Implementation
 
 This file tracks design decisions for the Arbitrum-side Vault contract.
