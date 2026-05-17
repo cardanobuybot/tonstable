@@ -1,0 +1,14 @@
+Foundry
+out/
+cache/
+broadcast/
+Dependencies
+lib/
+Environment
+.env
+.env.local
+Test artifacts
+*.log
+IDE
+.vscode/
+.idea/
