@@ -1,0 +1,15 @@
+{
+  "network": "arbitrum-sepolia",
+  "chainId": 421614,
+  "deployer": "0x43fd49Ed1B329936589bf711194809009491215e",
+  "lzEndpoint": "0x6EDCE65403992e310A62460808c4b910D972f10f",
+  "tonEid": 40343,
+  "contracts": {
+    "MockUSDC": "0x790666FCC2b2B7984EE21C933930c047A2deEf32",
+    "MockLUSD": "0x6E413f5eef1889b765F60f196C98896F89cC1422",
+    "MockSwapRouter": "0xFB5b9C2d70d207dA77e1e878EeF87F79391eEd4d",
+    "TonstableVault": "0xAc997b1723b497Aa7694D4a402Dd34943df81B20"
+  },
+  "deploymentTime": "2026-05-19T01:11:26Z",
+  "transactionLog": "broadcast/DeployTestnet.s.sol/421614/run-latest.json"
+}
