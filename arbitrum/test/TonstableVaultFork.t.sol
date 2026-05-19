@@ -6,6 +6,7 @@ import {TonstableVault} from "../src/TonstableVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Origin} from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
 import {IOAppCore} from "@layerzerolabs/oapp-evm/contracts/oapp/interfaces/IOAppCore.sol";
+import {MockSwapRouter} from "../src/mocks/MockSwapRouter.sol";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  FORK TESTS — Arbitrum Sepolia deployed contracts
@@ -275,5 +276,68 @@ contract TonstableVaultForkTest is Test {
         vm.prank(LZ_ENDPOINT);
         vm.expectRevert();
         vault.lzReceive(origin, bytes32(0), message, address(0), bytes(""));
+    }
+
+    function testFork_SlippageExceeded_Reverts() public {
+        // MOCK_ROUTER deployed bytecode on Sepolia predates setOutputBps.
+        // Etch the locally compiled MockSwapRouter bytecode onto the same
+        // address so we can configure slippage. This is local-only — does
+        // not modify on-chain state.
+        MockSwapRouter freshRouter = new MockSwapRouter();
+        vm.etch(MOCK_ROUTER, address(freshRouter).code);
+
+        // Setup: register peer for TON_EID, fund vault with USDC
+        address VAULT_OWNER = 0x43fd49Ed1B329936589bf711194809009491215e;
+        bytes32 senderPeer = bytes32(uint256(uint160(address(0xCAFE))));
+
+        vm.prank(VAULT_OWNER);
+        vault.setPeer(TON_EID, senderPeer);
+
+        // Fund vault with USDC so swap input side works
+        (bool ok,) = MOCK_USDC.call(
+            abi.encodeWithSignature("mint(address,uint256)", VAULT_ADDR, 1000e6)
+        );
+        require(ok, "mint usdc failed");
+
+        // Configure router to return only 50% of input — guaranteed slippage
+        (bool ok2,) = MOCK_ROUTER.call(
+            abi.encodeWithSignature("setOutputBps(uint16)", uint16(5000))
+        );
+        require(ok2, "setOutputBps failed");
+
+        // Build mint request with strict minLusdOut so swap fails the check
+        uint64 nonce = 1;
+        uint256 usdValue = 100e6;
+        uint256 minLusdOut = 99e18;  // demand near-perfect rate; router gives 50%
+
+        bytes memory payload = abi.encode(
+            nonce,
+            bytes32(uint256(42)),
+            usdValue,
+            minLusdOut,
+            block.timestamp + 1 hours
+        );
+        bytes memory message = abi.encode(uint16(1), payload);
+
+        Origin memory origin = Origin({
+            srcEid: TON_EID,
+            sender: senderPeer,
+            nonce: nonce
+        });
+
+        vm.prank(LZ_ENDPOINT);
+        // MockSwapRouter has built-in slippage check (mirrors real
+        // Uniswap v3 router behavior). It reverts first with this
+        // string; Vault's own SwapSlippageTooHigh acts as defense in
+        // depth for adapters that lack the check, but in production
+        // path (and here) the router-level revert fires first.
+        vm.expectRevert(bytes("Mock: insufficient output"));
+        vault.lzReceive(origin, bytes32(0), message, address(0), bytes(""));
+
+        // Reset outputBps for any subsequent tests in same run
+        (bool ok3,) = MOCK_ROUTER.call(
+            abi.encodeWithSignature("setOutputBps(uint16)", uint16(10000))
+        );
+        require(ok3, "reset outputBps failed");
     }
 }

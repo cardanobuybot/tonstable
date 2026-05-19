@@ -22,6 +22,13 @@ interface IMintableERC20 {
 contract MockSwapRouter {
     using SafeERC20 for IERC20;
 
+    // 10000 = 100% (1:1). Default preserves existing behaviour.
+    uint16 public outputBps = 10000;
+
+    function setOutputBps(uint16 bps) external {
+        outputBps = bps;
+    }
+
     struct ExactInputSingleParams {
         address tokenIn;
         address tokenOut;
@@ -53,7 +60,7 @@ contract MockSwapRouter {
         // For decimals adjustment: USDC=6, LUSD=18, etc.
         // We assume both tokens have same decimals for simplicity.
         // If different, caller adjusts amountOutMinimum accordingly.
-        amountOut = params.amountIn;
+        amountOut = (params.amountIn * outputBps) / 10000;
 
         require(
             amountOut >= params.amountOutMinimum,

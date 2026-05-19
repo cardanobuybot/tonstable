@@ -50,8 +50,15 @@ the rate. As a consequence:
 
 ## TODOs
 
-- [ ] Extend `MockSwapRouter` with configurable output ratio,
-  add `testFork_SlippageExceeded_Reverts`
+- [ ] ~~Extend `MockSwapRouter` with configurable output ratio,
+  add `testFork_SlippageExceeded_Reverts`~~ — done (`setOutputBps` +
+  `vm.etch`; router-level revert fires first)
 - [ ] Phase 2 fork tests for burn/redeem flow (happy path +
   negatives)
 - [ ] Replay protection test (`NonceAlreadyProcessed`)
+- [ ] Architectural review: `SwapSlippageTooHigh` in Vault may
+  be dead code in production path. MockSwapRouter (and real
+  Uniswap v3 router) revert first with their own slippage
+  check. Vault's guard is reachable only if a future adapter
+  lacks `amountOutMinimum` enforcement — verify whether to
+  keep it as defense-in-depth or remove.
