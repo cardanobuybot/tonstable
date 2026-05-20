@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Origin} from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
 import {IOAppCore} from "@layerzerolabs/oapp-evm/contracts/oapp/interfaces/IOAppCore.sol";
 import {MockSwapRouter} from "../src/mocks/MockSwapRouter.sol";
+import {MockSwapRouterScaled} from "../src/mocks/MockSwapRouterScaled.sol";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  FORK TESTS — Arbitrum Sepolia deployed contracts
@@ -339,5 +340,180 @@ contract TonstableVaultForkTest is Test {
             abi.encodeWithSignature("setOutputBps(uint16)", uint16(10000))
         );
         require(ok3, "reset outputBps failed");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  TEST 6: Full burn lifecycle — mint then redeem via real lzReceive
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function testFork_BurnFlow_Phase2() public {
+        // ── Etch scale-aware router onto deployed MOCK_ROUTER ───
+        // Deployed mock is 1:1-raw which makes mint→burn lifecycle
+        // produce zero TONSTBL (LUSD / 1e12 = 0). We overlay a
+        // scale-aware version that mirrors real Uniswap behavior:
+        // USDC (6 dec) <-> LUSD (18 dec) at 1:1 economic value.
+        MockSwapRouterScaled scaled = new MockSwapRouterScaled();
+        vm.etch(MOCK_ROUTER, address(scaled).code);
+        // Slot 0 (outputBps) is 0 on the fork — the original deployed router
+        // predates this variable. Initialise to 100% after etch.
+        vm.store(MOCK_ROUTER, bytes32(0), bytes32(uint256(10000)));
+
+        // ── Setup: register peer ────────────────────────────────
+        address VAULT_OWNER = 0x43fd49Ed1B329936589bf711194809009491215e;
+        bytes32 senderPeer = bytes32(uint256(uint160(address(0xCAFE))));
+
+        vm.prank(VAULT_OWNER);
+        vault.setPeer(TON_EID, senderPeer);
+
+        // ── Mock outbound LZ send ───────────────────────────────
+        vm.mockCall(
+            LZ_ENDPOINT,
+            abi.encodeWithSignature(
+                "send((uint32,bytes32,bytes,bytes,bool),address)"
+            ),
+            abi.encode(bytes32(uint256(1)), uint64(1), uint256(0), uint256(0))
+        );
+
+        // ── Fund vault with exactly 100 USDC ────────────────────
+        // Vault uses usdc.balanceOf(vault) as amountIn — fund exactly
+        // usdValue so the swap produces the expected 100e18 LUSD.
+        (bool ok,) = MOCK_USDC.call(
+            abi.encodeWithSignature(
+                "mint(address,uint256)", VAULT_ADDR, 100e6
+            )
+        );
+        require(ok, "fund usdc failed");
+
+        // ── Step 1: mint via simulated LZ delivery ──────────────
+        bytes32 userTon = bytes32(uint256(42));
+        uint256 usdValue = 100e6;       // 100 USDC — realistic scale
+        uint256 minLusdOut = 99e18;     // expect ~100 LUSD, allow 1% slippage
+
+        bytes memory mintPayload = abi.encode(
+            uint64(1),
+            userTon,
+            usdValue,
+            minLusdOut,
+            block.timestamp + 1 hours
+        );
+        bytes memory mintMessage = abi.encode(uint16(1), mintPayload);
+
+        Origin memory mintOrigin = Origin({
+            srcEid: TON_EID,
+            sender: senderPeer,
+            nonce: 1
+        });
+
+        vm.prank(LZ_ENDPOINT);
+        vault.lzReceive(
+            mintOrigin, bytes32(0), mintMessage, address(0), bytes("")
+        );
+
+        uint256 outstandingAfterMint = vault.outstandingTonstbl();
+        uint256 lockedAfterMint = vault.totalCollateralLocked();
+
+        // With scaled router: 100 USDC → 100e18 LUSD → 100e6 TONSTBL
+        assertEq(outstandingAfterMint, 100e6, "expected 100 TONSTBL minted");
+        assertEq(lockedAfterMint, 100e18, "expected 100 LUSD locked");
+
+        // ── Step 2: redeem half of minted TONSTBL ───────────────
+        uint128 tonstblToBurn = uint128(outstandingAfterMint / 2);  // 50 TONSTBL
+
+        bytes memory burnPayload = abi.encode(
+            uint64(2),
+            userTon,
+            tonstblToBurn,
+            uint64(block.timestamp + 1 hours)
+        );
+        bytes memory burnMessage = abi.encode(uint16(2), burnPayload);
+
+        Origin memory burnOrigin = Origin({
+            srcEid: TON_EID,
+            sender: senderPeer,
+            nonce: 2
+        });
+
+        vm.prank(LZ_ENDPOINT);
+        vault.lzReceive(
+            burnOrigin, bytes32(0), burnMessage, address(0), bytes("")
+        );
+
+        // ── Assertions ──────────────────────────────────────────
+        // outstandingTonstbl decreased by exactly tonstblToBurn
+        assertEq(
+            outstandingAfterMint - vault.outstandingTonstbl(),
+            tonstblToBurn,
+            "outstanding delta != tonstblBurned"
+        );
+
+        // totalCollateralLocked decreased by tonstblBurned * 1e12
+        assertEq(
+            lockedAfterMint - vault.totalCollateralLocked(),
+            uint256(tonstblToBurn) * 1e12,
+            "collateral delta != tonstblBurned * 1e12"
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  TEST 7: Replay protection — duplicate nonce must revert
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function testFork_NonceAlreadyProcessed_Reverts() public {
+        // Setup
+        address VAULT_OWNER = 0x43fd49Ed1B329936589bf711194809009491215e;
+        bytes32 senderPeer = bytes32(uint256(uint160(address(0xCAFE))));
+
+        vm.prank(VAULT_OWNER);
+        vault.setPeer(TON_EID, senderPeer);
+
+        vm.mockCall(
+            LZ_ENDPOINT,
+            abi.encodeWithSignature(
+                "send((uint32,bytes32,bytes,bytes,bool),address)"
+            ),
+            abi.encode(bytes32(uint256(1)), uint64(1), uint256(0), uint256(0))
+        );
+
+        // Use scaled router so first mint produces non-zero state —
+        // makes the test scenario realistic (real replay attempts
+        // would target a mint that produced actual TONSTBL)
+        MockSwapRouterScaled scaled = new MockSwapRouterScaled();
+        vm.etch(MOCK_ROUTER, address(scaled).code);
+        vm.store(MOCK_ROUTER, bytes32(0), bytes32(uint256(10000)));
+
+        (bool ok,) = MOCK_USDC.call(
+            abi.encodeWithSignature(
+                "mint(address,uint256)", VAULT_ADDR, 1000e6
+            )
+        );
+        require(ok, "fund usdc failed");
+
+        uint64 nonce = 1;
+        bytes memory payload = abi.encode(
+            nonce,
+            bytes32(uint256(42)),
+            uint256(100e6),
+            uint256(99e18),
+            block.timestamp + 1 hours
+        );
+        bytes memory message = abi.encode(uint16(1), payload);
+
+        Origin memory origin = Origin({
+            srcEid: TON_EID,
+            sender: senderPeer,
+            nonce: nonce
+        });
+
+        // First mint — succeeds
+        vm.prank(LZ_ENDPOINT);
+        vault.lzReceive(origin, bytes32(0), message, address(0), bytes(""));
+
+        // Sanity: confirm first mint actually produced TONSTBL
+        assertGt(vault.outstandingTonstbl(), 0, "first mint produced nothing");
+
+        // Second mint with SAME nonce — must revert
+        vm.prank(LZ_ENDPOINT);
+        vm.expectRevert(TonstableVault.NonceAlreadyProcessed.selector);
+        vault.lzReceive(origin, bytes32(0), message, address(0), bytes(""));
     }
 }
