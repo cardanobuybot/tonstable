@@ -22,7 +22,7 @@ cd arbitrum
 forge test --match-contract TonstableVaultForkTest --fork-url $ARB_SEPOLIA_RPC
 ```
 
-Current: 8/8 passing.
+Current: 11/11 passing.
 
 ## Coverage
 
@@ -36,6 +36,9 @@ Current: 8/8 passing.
 | `testFork_SlippageExceeded_Reverts` | Router-level slippage check fires when `outputBps = 5000` and `minLusdOut` demands near-full output. Uses `vm.etch` + `setOutputBps` to configure the deployed `MOCK_ROUTER` address. |
 | `testFork_BurnFlow_Phase2` | End-to-end mint→burn lifecycle. Uses `vm.etch` to overlay a scale-aware `MockSwapRouterScaled` onto the deployed `MOCK_ROUTER` so swap math respects token decimals (USDC 6 ↔ LUSD 18 at 1:1 economic value). Asserts exact deltas: outstanding decreases by `tonstblBurned`, locked collateral decreases by `tonstblBurned * 1e12`. |
 | `testFork_NonceAlreadyProcessed_Reverts` | Replay protection — second `lzReceive` with identical nonce reverts with `NonceAlreadyProcessed.selector`. |
+| `testFork_DeadlineExpired_SoftFailure` | Burn with a past `deadline`. Vault does NOT revert — sends a failure message back via LZ (`_sendRedeemFailure` code 1) and leaves state untouched. Asserts `outstandingTonstbl` and `totalCollateralLocked` are unchanged, and the nonce is still marked processed (replay blocked). |
+| `testFork_InsufficientCollateral_SoftFailure` | Burn requesting more TONSTBL than outstanding (`collateralToRelease > totalCollateralLocked`). Soft failure via `_sendRedeemFailure` code 2 — no revert, state unchanged. |
+| `testFork_PayoutExceedsSanityCeiling_Reverts` | Hard revert. Router output cranked to 130% via `outputBps`, pushing `netUsdcPayout` above `expectedPayout * 110%`. Reverts with `PayoutExceedsSanityCeiling.selector`. |
 
 ## Known limitations
 
@@ -85,6 +88,32 @@ This is a deliberate design choice and not a bug, but it warrants
 documentation. The `usdValue` field of the message is effectively
 informational/upper-bound rather than the actual swap input.
 
+### Soft-failure vs hard-revert semantics
+
+The redeem handler distinguishes two failure modes, and tests
+must treat them differently:
+
+- **Soft failures** (expired deadline, insufficient collateral):
+  the handler calls `_sendRedeemFailure(nonce, userTon, code)`
+  and `return`s. The transaction succeeds — no revert — but
+  state is left untouched and a failure message is sent back to
+  the TON side via LayerZero. Tests assert (1) state is
+  unchanged, (2) the outbound LZ `send` fires (`vm.expectCall`),
+  and (3) the nonce is marked processed so the same request
+  cannot be replayed.
+- **Hard reverts** (`PayoutExceedsSanityCeiling`): the handler
+  reverts, rolling back all state including the nonce mark.
+  Tests use `vm.expectRevert(<selector>)`.
+
+Note on mocking outbound LZ: all fork tests that reach an
+outbound `send` must mock the endpoint with the EXACT signature
+`send((uint32,bytes32,bytes,bytes,bool),address)` — the final
+field is `bool payInLzToken`, not `bytes`. A wrong signature
+silently fails to intercept the call, letting it hit the real
+SendLib and revert with `0x6592671c`. The `MessagingReceipt`
+mock return must have 4 fields:
+`abi.encode(bytes32(0), uint64(0), uint256(0), uint256(0))`.
+
 ## TODOs
 
 - [x] Extend `MockSwapRouter` with configurable output ratio,
@@ -93,9 +122,16 @@ informational/upper-bound rather than the actual swap input.
       (done in v0.4.0)
 - [x] Replay protection test (`NonceAlreadyProcessed`)
       (done in v0.4.0)
-- [ ] Phase 2 negatives: deadline-expired (soft failure via
-      `_sendRedeemFailure`, not revert), insufficient locked
-      collateral, `PayoutExceedsSanityCeiling`
+- [x] Phase 2 negatives: deadline-expired, insufficient
+      collateral, payout sanity ceiling (done in v0.5.0)
+- [ ] TON-side OApp: replace MockBridgeAdapter with a real
+      LayerZero OApp on TON (Tolk or FunC). This is the largest
+      remaining piece — half the protocol currently has no
+      real implementation.
+- [ ] Real cross-chain integration test (TON testnet ->
+      Arbitrum Sepolia) once the TON OApp exists.
+- [ ] Sepolia redeployment against real USDC + real Uniswap v3
+      pool (deferred until cross-chain works with mocks).
 - [ ] Consider unifying `MockSwapRouter` and `MockSwapRouterScaled`
       — current dual-mock model is honest but adds cognitive load
 - [ ] Consider whether `usdValue` field should be removed from

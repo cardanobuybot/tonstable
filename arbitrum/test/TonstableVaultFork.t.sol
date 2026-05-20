@@ -516,4 +516,231 @@ contract TonstableVaultForkTest is Test {
         vm.expectRevert(TonstableVault.NonceAlreadyProcessed.selector);
         vault.lzReceive(origin, bytes32(0), message, address(0), bytes(""));
     }
+
+    function testFork_DeadlineExpired_SoftFailure() public {
+        // ── Setup: scaled router + peer + LZ mock ───────────────
+        MockSwapRouterScaled scaled = new MockSwapRouterScaled();
+        vm.etch(MOCK_ROUTER, address(scaled).code);
+        vm.store(MOCK_ROUTER, bytes32(0), bytes32(uint256(10000)));
+
+        address VAULT_OWNER = 0x43fd49Ed1B329936589bf711194809009491215e;
+        bytes32 senderPeer = bytes32(uint256(uint160(address(0xCAFE))));
+
+        vm.prank(VAULT_OWNER);
+        vault.setPeer(TON_EID, senderPeer);
+
+        bytes memory mockReceipt = abi.encode(bytes32(0), uint64(0), uint256(0), uint256(0));
+        vm.mockCall(
+            LZ_ENDPOINT,
+            abi.encodeWithSelector(bytes4(keccak256("send((uint32,bytes32,bytes,bytes,bool),address)"))),
+            mockReceipt
+        );
+
+        // ── Fund vault and do one successful mint for state ─────
+        (bool ok,) = MOCK_USDC.call(
+            abi.encodeWithSignature(
+                "mint(address,uint256)", VAULT_ADDR, 1000e6
+            )
+        );
+        require(ok, "fund usdc failed");
+
+        bytes32 userTon = bytes32(uint256(42));
+        bytes memory mintPayload = abi.encode(
+            uint64(1), userTon, uint256(100e6), uint256(99e18),
+            block.timestamp + 1 hours
+        );
+        bytes memory mintMessage = abi.encode(uint16(1), mintPayload);
+        Origin memory mintOrigin = Origin({
+            srcEid: TON_EID, sender: senderPeer, nonce: 1
+        });
+        vm.prank(LZ_ENDPOINT);
+        vault.lzReceive(mintOrigin, bytes32(0), mintMessage, address(0), bytes(""));
+
+        uint256 outstandingBefore = vault.outstandingTonstbl();
+        uint256 lockedBefore = vault.totalCollateralLocked();
+        assertGt(outstandingBefore, 0, "mint produced zero outstanding");
+
+        // ── Burn with EXPIRED deadline ─────────────────────────
+        // deadline in the past — vault must NOT revert, must send
+        // failure message instead
+        uint64 expiredDeadline = uint64(block.timestamp - 1);
+        uint128 tonstblToBurn = uint128(outstandingBefore / 2);
+
+        bytes memory burnPayload = abi.encode(
+            uint64(2), userTon, tonstblToBurn, expiredDeadline
+        );
+        bytes memory burnMessage = abi.encode(uint16(2), burnPayload);
+        Origin memory burnOrigin = Origin({
+            srcEid: TON_EID, sender: senderPeer, nonce: 2
+        });
+
+        // Expect outbound LZ send to fire (this is the failure path)
+        vm.expectCall(
+            LZ_ENDPOINT,
+            abi.encodeWithSelector(bytes4(keccak256("send((uint32,bytes32,bytes,bytes,bool),address)")))
+        );
+
+        vm.prank(LZ_ENDPOINT);
+        vault.lzReceive(burnOrigin, bytes32(0), burnMessage, address(0), bytes(""));
+
+        // ── Critical assertion: state UNCHANGED ─────────────────
+        // Soft failure means no money moved — outstanding and locked
+        // collateral must be identical to pre-burn state.
+        assertEq(
+            vault.outstandingTonstbl(), outstandingBefore,
+            "deadline-expired must not reduce outstanding"
+        );
+        assertEq(
+            vault.totalCollateralLocked(), lockedBefore,
+            "deadline-expired must not reduce locked collateral"
+        );
+
+        // Nonce SHOULD be marked as processed (replay still blocked)
+        // Verify by attempting same nonce again — must revert
+        vm.prank(LZ_ENDPOINT);
+        vm.expectRevert(TonstableVault.NonceAlreadyProcessed.selector);
+        vault.lzReceive(burnOrigin, bytes32(0), burnMessage, address(0), bytes(""));
+    }
+
+    function testFork_InsufficientCollateral_SoftFailure() public {
+        // ── Setup: same as previous test ────────────────────────
+        MockSwapRouterScaled scaled = new MockSwapRouterScaled();
+        vm.etch(MOCK_ROUTER, address(scaled).code);
+        vm.store(MOCK_ROUTER, bytes32(0), bytes32(uint256(10000)));
+
+        address VAULT_OWNER = 0x43fd49Ed1B329936589bf711194809009491215e;
+        bytes32 senderPeer = bytes32(uint256(uint160(address(0xCAFE))));
+
+        vm.prank(VAULT_OWNER);
+        vault.setPeer(TON_EID, senderPeer);
+
+        bytes memory mockReceipt = abi.encode(bytes32(0), uint64(0), uint256(0), uint256(0));
+        vm.mockCall(
+            LZ_ENDPOINT,
+            abi.encodeWithSelector(bytes4(keccak256("send((uint32,bytes32,bytes,bytes,bool),address)"))),
+            mockReceipt
+        );
+
+        // ── Fund vault and mint to create some collateral ───────
+        (bool ok,) = MOCK_USDC.call(
+            abi.encodeWithSignature(
+                "mint(address,uint256)", VAULT_ADDR, 100e6
+            )
+        );
+        require(ok, "fund usdc failed");
+
+        bytes32 userTon = bytes32(uint256(42));
+        bytes memory mintPayload = abi.encode(
+            uint64(1), userTon, uint256(100e6), uint256(99e18),
+            block.timestamp + 1 hours
+        );
+        bytes memory mintMessage = abi.encode(uint16(1), mintPayload);
+        Origin memory mintOrigin = Origin({
+            srcEid: TON_EID, sender: senderPeer, nonce: 1
+        });
+        vm.prank(LZ_ENDPOINT);
+        vault.lzReceive(mintOrigin, bytes32(0), mintMessage, address(0), bytes(""));
+
+        uint256 outstandingBefore = vault.outstandingTonstbl();
+        uint256 lockedBefore = vault.totalCollateralLocked();
+        assertEq(outstandingBefore, 100e6, "mint produced != 100 TONSTBL");
+
+        // ── Burn MORE than was ever minted ─────────────────────
+        // Request 200 TONSTBL when only 100 outstanding —
+        // collateralToRelease = 200e6 * 1e12 = 200e18 LUSD > locked 100e18
+        uint128 tonstblToBurn = 200e6;  // 200 TONSTBL, way over outstanding
+
+        bytes memory burnPayload = abi.encode(
+            uint64(2), userTon, tonstblToBurn,
+            uint64(block.timestamp + 1 hours)
+        );
+        bytes memory burnMessage = abi.encode(uint16(2), burnPayload);
+        Origin memory burnOrigin = Origin({
+            srcEid: TON_EID, sender: senderPeer, nonce: 2
+        });
+
+        // Expect outbound failure message
+        vm.expectCall(
+            LZ_ENDPOINT,
+            abi.encodeWithSelector(bytes4(keccak256("send((uint32,bytes32,bytes,bytes,bool),address)")))
+        );
+
+        vm.prank(LZ_ENDPOINT);
+        vault.lzReceive(burnOrigin, bytes32(0), burnMessage, address(0), bytes(""));
+
+        // ── State unchanged ─────────────────────────────────────
+        assertEq(
+            vault.outstandingTonstbl(), outstandingBefore,
+            "insufficient-collateral must not reduce outstanding"
+        );
+        assertEq(
+            vault.totalCollateralLocked(), lockedBefore,
+            "insufficient-collateral must not reduce locked"
+        );
+    }
+
+    function testFork_PayoutExceedsSanityCeiling_Reverts() public {
+        // ── Setup ───────────────────────────────────────────────
+        MockSwapRouterScaled scaled = new MockSwapRouterScaled();
+        vm.etch(MOCK_ROUTER, address(scaled).code);
+        vm.store(MOCK_ROUTER, bytes32(0), bytes32(uint256(10000)));
+
+        address VAULT_OWNER = 0x43fd49Ed1B329936589bf711194809009491215e;
+        bytes32 senderPeer = bytes32(uint256(uint160(address(0xCAFE))));
+
+        vm.prank(VAULT_OWNER);
+        vault.setPeer(TON_EID, senderPeer);
+
+        bytes memory mockReceipt = abi.encode(bytes32(0), uint64(0), uint256(0), uint256(0));
+        vm.mockCall(
+            LZ_ENDPOINT,
+            abi.encodeWithSelector(bytes4(keccak256("send((uint32,bytes32,bytes,bytes,bool),address)"))),
+            mockReceipt
+        );
+
+        (bool ok,) = MOCK_USDC.call(
+            abi.encodeWithSignature(
+                "mint(address,uint256)", VAULT_ADDR, 1000e6
+            )
+        );
+        require(ok, "fund usdc failed");
+
+        // ── Mint normally to create state ───────────────────────
+        bytes32 userTon = bytes32(uint256(42));
+        bytes memory mintPayload = abi.encode(
+            uint64(1), userTon, uint256(100e6), uint256(99e18),
+            block.timestamp + 1 hours
+        );
+        bytes memory mintMessage = abi.encode(uint16(1), mintPayload);
+        Origin memory mintOrigin = Origin({
+            srcEid: TON_EID, sender: senderPeer, nonce: 1
+        });
+        vm.prank(LZ_ENDPOINT);
+        vault.lzReceive(mintOrigin, bytes32(0), mintMessage, address(0), bytes(""));
+
+        // ── Crank router output to 130% — beyond sanity ceiling ─
+        // expectedPayout for 50 TONSTBL = 50e6 USDC raw
+        // ceiling = 50e6 * 110 / 100 = 55e6
+        // outputBps=13000 → router returns 130% → 65e6 > 55e6 → revert
+        (bool ok2,) = MOCK_ROUTER.call(
+            abi.encodeWithSignature("setOutputBps(uint16)", uint16(13000))
+        );
+        require(ok2, "setOutputBps failed");
+
+        // ── Burn 50 TONSTBL — should trigger PayoutExceedsSanityCeiling ─
+        uint128 tonstblToBurn = 50e6;
+
+        bytes memory burnPayload = abi.encode(
+            uint64(2), userTon, tonstblToBurn,
+            uint64(block.timestamp + 1 hours)
+        );
+        bytes memory burnMessage = abi.encode(uint16(2), burnPayload);
+        Origin memory burnOrigin = Origin({
+            srcEid: TON_EID, sender: senderPeer, nonce: 2
+        });
+
+        vm.prank(LZ_ENDPOINT);
+        vm.expectRevert(TonstableVault.PayoutExceedsSanityCeiling.selector);
+        vault.lzReceive(burnOrigin, bytes32(0), burnMessage, address(0), bytes(""));
+    }
 }
