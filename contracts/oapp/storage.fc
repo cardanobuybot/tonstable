@@ -1,0 +1,23 @@
+#include "lz/protocol/core/baseStorage.fc";
+#include "lz/apps/baseOApp/storage.fc";
+
+const int TonstableOApp::NAME = "tonstable-oapp"u;
+
+;; field indices
+const int TonstableOApp::baseStorage     = 0;
+const int TonstableOApp::baseOAppStorage = 1;
+const int TonstableOApp::minterAddress   = 2;
+
+cell TonstableOApp::New(int owner, int controllerAddress, int eid,
+                        int minterAddress, cell endpointCode,
+                        cell channelCode) inline method_id {
+    return cl::declare(
+        TonstableOApp::NAME,
+        unsafeTuple([
+            [cl::t::objRef, BaseStorage::New(owner)],
+            [cl::t::objRef, BaseOApp::New(controllerAddress, eid,
+                                          endpointCode, channelCode)],
+            [cl::t::uint256, minterAddress]
+        ])
+    );
+}

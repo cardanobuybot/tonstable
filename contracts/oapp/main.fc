@@ -1,0 +1,35 @@
+#include "lz/funC++/contractMain.fc";
+#include "lz/apps/baseOApp/oAppMain.fc";
+#include "lz/protocol/core/abstract/protocolHandler.fc";
+#include "lz/funC++/actions/call.fc";
+#include "lz/funC++/actions/event.fc";
+#include "lz/funC++/actions/dispatch.fc";
+
+#include "handler.fc";
+#include "interface.fc";
+
+tuple _executeOpcode(int op, cell $md) impure inline {
+    if (op == TonstableOApp::OP::BRIDGE_MINT_REQUEST) {
+        ;; TODO: encode + _lzSend to Arbitrum Vault
+        return empty_tuple();
+    } elseif (op == TonstableOApp::OP::BRIDGE_REDEEM_REQUEST) {
+        ;; TODO: encode + _lzSend
+        return empty_tuple();
+    } else {
+        return runOAppHandler(op, $md);
+    }
+}
+
+int _executeAction(int actionType, tuple action) impure inline {
+    if (actionType == action::event::NAME) {
+        return executeEvent(action);
+    } elseif (actionType == action::call::NAME) {
+        return executeCall(action);
+    } elseif (actionType == action::dispatch::NAME) {
+        return executeDispatch(action);
+    } else {
+        throw(BaseInterface::ERROR::invalidActionType);
+    }
+
+    return false;
+}

@@ -1,0 +1,49 @@
+#include "lz/funC++/handlerCore.fc";
+#include "lz/apps/baseOApp/handler.fc";
+#include "interface.fc";
+#include "storage.fc";
+
+;;; ================STORAGE FUNCTIONS=====================
+
+cell getBaseOAppStorage() impure method_id {
+    return getContractStorage().cl::get<objRef>(TonstableOApp::baseOAppStorage);
+}
+
+cell setBaseOAppStorage(cell $storage, cell $newBaseOAppStorage) {
+    return $storage.cl::set(TonstableOApp::baseOAppStorage, $newBaseOAppStorage);
+}
+
+;;; ================INTERFACE FUNCTIONS=====================
+
+(cell, tuple) _initialize(cell $md) impure inline {
+    return preamble();
+}
+
+int lzReceiveGas(cell $packet) impure inline method_id {
+    return 10 * 1000;
+}
+
+int lzSendGas(int opcode, cell $input) impure method_id {
+    return 10 * 1000;
+}
+
+;;; ================PERMISSION FUNCTIONS=====================
+
+() _checkPermissions(int op, cell $md) impure inline {
+    return _oAppCheckPermissions(op, $md);
+}
+
+;;; ==========================HANDLERS=====================================
+
+(cell, tuple) _sendCallback(cell $storage, tuple actions, cell $messagingReceipt) impure inline {
+    return ($storage, actions);
+}
+
+tuple _lzReceivePrepare(cell $storage, tuple actions, cell $packet) impure inline method_id {
+    return actions;
+}
+
+(cell, tuple, int) _lzReceiveExecute(cell $storage, tuple actions, cell $packet) impure inline {
+    ;; TODO: decode packet message, handle MintConfirmation / RedeemPayout
+    return ($storage, actions, true);
+}

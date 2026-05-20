@@ -1,0 +1,13 @@
+#include "lz/apps/baseOApp/interface.fc";
+#include "storage.fc";
+
+;; ===== Opcodes from Minter (local TON messages) =====
+const int TonstableOApp::OP::BRIDGE_MINT_REQUEST   = 0x544E5310;
+const int TonstableOApp::OP::BRIDGE_REDEEM_REQUEST = 0x544E5311;
+
+;; ===== Opcodes to Minter (we send these back) =====
+const int TonstableOApp::OP::MINT_CONFIRMATION = 0x544E5302;
+const int TonstableOApp::OP::REDEEM_PAYOUT     = 0x544E5304;
+
+;; ===== Error codes =====
+const int TonstableOApp::ERROR::invalidRequest = "invalidRequest"c & ERRORCODE_MASK;
