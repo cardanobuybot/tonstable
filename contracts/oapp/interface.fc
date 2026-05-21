@@ -9,5 +9,12 @@ const int TonstableOApp::OP::BRIDGE_REDEEM_REQUEST = 0x544E5311;
 const int TonstableOApp::OP::MINT_CONFIRMATION = 0x544E5302;
 const int TonstableOApp::OP::REDEEM_PAYOUT     = 0x544E5304;
 
+;; ===== Destination chain =====
+;; LayerZero EID for Arbitrum Sepolia testnet (chainId 421614)
+const int ARBITRUM_SEPOLIA_EID = 40231;
+
+;; msgType for _lzSend enforced-options lookup (not the payload prefix)
+const int TonstableOApp::MSG_TYPE::BRIDGE_MINT = 1;
+
 ;; ===== Error codes =====
 const int TonstableOApp::ERROR::invalidRequest = "invalidRequest"c & ERRORCODE_MASK;

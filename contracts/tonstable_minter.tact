@@ -279,13 +279,20 @@ contract TonstableMinter with Deployable, Ownable {
             value:  bridgeMsgValue,
             bounce: true,
             mode:   0,
-            body:   BridgeMintRequest{
-                nonce:      nonce,
-                userTon:    user,
-                usdValue:   usdValue,
-                minLusdOut: msg.minTonstblOut,
-                deadline:   msg.deadline,
-            }.toCell(),
+            body:   beginCell()
+                .storeUint(0x544E5310, 32)
+                .storeUint(nonce, 64)
+                .storeCoins(0)
+                .storeRef(
+                    beginCell()
+                        .storeUint(nonce, 64)
+                        .storeAddress(user)
+                        .storeUint(usdValue, 128)
+                        .storeUint(msg.minTonstblOut, 128)
+                        .storeUint(msg.deadline, 64)
+                    .endCell()
+                )
+            .endCell(),
         });
 
         emit(beginCell()

@@ -1,5 +1,6 @@
 #include "lz/funC++/handlerCore.fc";
 #include "lz/apps/baseOApp/handler.fc";
+#include "lz/protocol/msglibs/BytesEncoder.fc";
 #include "interface.fc";
 #include "storage.fc";
 
@@ -30,10 +31,63 @@ int lzSendGas(int opcode, cell $input) impure method_id {
 ;;; ================PERMISSION FUNCTIONS=====================
 
 () _checkPermissions(int op, cell $md) impure inline {
-    return _oAppCheckPermissions(op, $md);
+    if (op == TonstableOApp::OP::BRIDGE_MINT_REQUEST) {
+        return ();
+    } else {
+        return _oAppCheckPermissions(op, $md);
+    }
 }
 
 ;;; ==========================HANDLERS=====================================
+
+;; Encodes a BridgeMintRequest from the Minter and sends it to the Arbitrum Vault via LZ.
+;; $md is a raw cell written by the Minter:
+;;   [uint64 nonce][addr userTon (267 bits)][uint128 usdValue][uint128 minLusdOut][uint64 deadline]
+;;
+;; The outbound lzMessage is ABI-encoded as the Vault expects:
+;;   abi.encode(uint16(1), abi.encode(nonce, userTon_hash, usdValue, minLusdOut, deadline))
+;; where userTon_hash is the 256-bit hash of the TON address (workchain 0 assumed).
+tuple handleBridgeMintRequest(cell $md) impure inline {
+    (cell $storage, tuple actions) = preamble();
+
+    slice ms = $md.begin_parse();
+    int nonce      = ms~load_uint(64);
+    (int wc, int userTonHash) = parseStdAddress(ms~load_msg_addr());
+    int usdValue   = ms~load_uint(128);
+    int minLusdOut = ms~load_uint(128);
+    int deadline   = ms~load_uint(64);
+
+    ;; ABI-encode outer: abi.encode(uint16 msgType, bytes payload)
+    ;; ABI encoding: each slot is 32 bytes (feed<uint256> = store_uint256 = right-aligned).
+    ;; slot[0] = msgType = 1 (MSG_BRIDGE_MINT_REQUEST)
+    ;; slot[1] = offset  = 64 (0x40: start of bytes after two head slots)
+    ;; slot[2] = length  = 160 (0xA0: 5 inner uint256 slots = 160 bytes)
+    ;; slots[3..7] = inner abi.encode(nonce, userTon, usdValue, minLusdOut, deadline)
+    cell lzMessage = BytesEncoder::New()
+        .BytesEncoder::feed<uint256>(1)            ;; outer slot[0]: msgType
+        .BytesEncoder::feed<uint256>(64)           ;; outer slot[1]: bytes offset
+        .BytesEncoder::feed<uint256>(160)          ;; outer slot[2]: bytes length
+        .BytesEncoder::feed<uint256>(nonce)        ;; inner slot[0]: uint64 nonce
+        .BytesEncoder::feed<uint256>(userTonHash)  ;; inner slot[1]: bytes32 userTon
+        .BytesEncoder::feed<uint256>(usdValue)     ;; inner slot[2]: uint128 usdValue
+        .BytesEncoder::feed<uint256>(minLusdOut)   ;; inner slot[3]: uint128 minLusdOut
+        .BytesEncoder::feed<uint256>(deadline)     ;; inner slot[4]: uint64 deadline
+        .BytesEncoder::serialize();
+
+    actions = _lzSend(
+        ARBITRUM_SEPOLIA_EID,
+        TonstableOApp::MSG_TYPE::BRIDGE_MINT,
+        0,
+        0,
+        cl::nullObject(),
+        lzMessage,
+        0,
+        empty_cell(),
+        actions
+    );
+
+    return actions;
+}
 
 (cell, tuple) _sendCallback(cell $storage, tuple actions, cell $messagingReceipt) impure inline {
     return ($storage, actions);
