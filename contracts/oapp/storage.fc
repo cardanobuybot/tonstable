@@ -1,7 +1,7 @@
 #include "lz/protocol/core/baseStorage.fc";
 #include "lz/apps/baseOApp/storage.fc";
 
-const int TonstableOApp::NAME = "tonstable-oapp"u;
+const int TonstableOApp::NAME = "tonstable"u; ;; MAX_NAME_LEN=10; matches TS wrapper
 
 ;; field indices
 const int TonstableOApp::baseStorage     = 0;

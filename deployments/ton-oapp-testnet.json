@@ -1,0 +1,10 @@
+{
+  "network": "ton-testnet",
+  "eid": 40343,
+  "contracts": {
+    "TonstableOApp": "EQCiwlGB9FdTotJbvdzv_ivcJevcNeYOWM9DsmgdQ6D7nYot",
+    "TonstableMinter": "EQAYNaqE6fdlxo2giEWWQU3QDHyxdN4atT9ixf8fAAy4XWth"
+  },
+  "lzController": "EQAYlRK0qV4D1VqN7kl8NN3ghmO8xDgoGO84LLe3zfetaogF",
+  "deployedFrom": "kQAvWnxIIxiQ73MrKzI9_zQCxinF1yO5G7WZ1s7_Yo7lb5qq"
+}
