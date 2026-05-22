@@ -79,6 +79,21 @@ export class TonstableOApp implements Contract {
         });
     }
 
+    async sendInitialize(provider: ContractProvider, via: Sender, value: bigint): Promise<void> {
+        // BaseInterface::OP::INITIALIZE = "BaseInterface::OP::INITIALIZE"c = 4133284232
+        const OP_INITIALIZE = 4133284232n;
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(OP_INITIALIZE, 32)
+                .storeUint(0n, 64)
+                .storeCoins(0n)
+                .storeRef(beginCell().endCell())
+                .endCell(),
+        });
+    }
+
     async sendSetPeer(
         provider: ContractProvider,
         via: Sender,
