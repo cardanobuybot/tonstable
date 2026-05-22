@@ -108,6 +108,10 @@ message(0x544E5340) WithdrawFees    { amount: Int as coins; destination: Address
 message(0x544E5341) SetPendingTimeout { newTimeout: Int as uint32; }
 message(0x544E5342) SetMinDeposit   { newMin: Int as coins; }
 
+message AllowlistAdd           { addr: Address; }
+message AllowlistRemove        { addr: Address; }
+message SetAllowlistEnabled    { enabled: Bool; }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ИСХОДЯЩИЕ
@@ -157,6 +161,11 @@ struct JettonMasterData {
     jettonWalletCode: Cell;
 }
 
+struct AllowlistView {
+    enabled:   Bool;
+    isAllowed: Bool;
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  CONTRACT
@@ -190,6 +199,9 @@ contract TonstableMinter with Deployable, Ownable {
     paused:         Bool;
     pendingTimeout: Int as uint32;
 
+    allowlist:        map<Address, Bool>;
+    allowlistEnabled: Bool;
+
 
     init(
         owner:         Address,
@@ -219,6 +231,8 @@ contract TonstableMinter with Deployable, Ownable {
         self.pendingRedeems      = emptyMap();
         self.paused              = false;
         self.pendingTimeout      = DEFAULT_PENDING_TIMEOUT;
+        self.allowlist           = emptyMap();
+        self.allowlistEnabled    = true;
     }
 
 
@@ -238,6 +252,10 @@ contract TonstableMinter with Deployable, Ownable {
         let ctx: Context = context();
         let depositTon: Int = ctx.value;
         let user: Address = ctx.sender;
+
+        if (self.allowlistEnabled) {
+            require(self.allowlist.get(user) == true, "minter: not allowlisted");
+        }
 
         require(depositTon >= self.minDepositTon, "minter: below min deposit");
 
@@ -508,6 +526,19 @@ contract TonstableMinter with Deployable, Ownable {
     }
     receive(msg: Unpause) { self.requireOwner(); self.paused = false; }
 
+    receive(msg: AllowlistAdd) {
+        self.requireOwner();
+        self.allowlist.set(msg.addr, true);
+    }
+    receive(msg: AllowlistRemove) {
+        self.requireOwner();
+        self.allowlist.set(msg.addr, false);
+    }
+    receive(msg: SetAllowlistEnabled) {
+        self.requireOwner();
+        self.allowlistEnabled = msg.enabled;
+    }
+
     receive(msg: WithdrawFees) {
         self.requireOwner();
         require(!self.paused, "minter: paused");
@@ -551,6 +582,9 @@ contract TonstableMinter with Deployable, Ownable {
 
     receive(msg: JettonBurnNotification) {
         require(!self.paused, "minter: paused");
+        if (self.allowlistEnabled) {
+            require(self.allowlist.get(msg.owner) == true, "minter: not allowlisted");
+        }
         // Verify the sender is the legitimate JettonWallet for msg.owner
         require(sender() == self._walletAddress(msg.owner), "minter: invalid wallet");
         require(msg.amount > 0, "minter: zero burn");
@@ -783,4 +817,10 @@ contract TonstableMinter with Deployable, Ownable {
     get fun totalSupplyOf(): Int { return self.totalSupply; }
     get fun isPaused(): Bool { return self.paused; }
     get fun getPendingOwner(): Address? { return self.pendingOwner; }
+    get fun allowlistInfo(addr: Address): AllowlistView {
+        return AllowlistView{
+            enabled:   self.allowlistEnabled,
+            isAllowed: self.allowlist.get(addr) == true,
+        };
+    }
 }
