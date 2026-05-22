@@ -11,6 +11,7 @@ import {
 import { compile } from '@ton/blueprint';
 import {
     ClDeclareField,
+    OPCODES,
     addressToBigInt,
     asciiStringToBigint,
     cl,
@@ -66,11 +67,45 @@ export class TonstableOApp implements Contract {
         return new TonstableOApp(contractAddress(workchain, init), init);
     }
 
+    static createFromAddress(address: Address): TonstableOApp {
+        return new TonstableOApp(address);
+    }
+
     async sendDeploy(provider: ContractProvider, via: Sender, value: bigint): Promise<void> {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell().endCell(),
+        });
+    }
+
+    async sendSetPeer(
+        provider: ContractProvider,
+        via: Sender,
+        opts: { value: bigint; dstEid: number; peer: bigint },
+    ): Promise<void> {
+        // Build md::SetPeer cell via SDK clDeclare (same pattern as buildData).
+        // SDK uses @ton/core@0.59 — BOC round-trip bridges the version gap.
+        const sdkMd = clDeclare(
+            asciiStringToBigint('setPeer'),
+            [
+                { type: cl.t.uint32,  value: BigInt(opts.dstEid) },
+                { type: cl.t.uint256, value: opts.peer },
+            ],
+        ) as unknown as { toBoc(): Buffer };
+        const mdCell = Cell.fromBoc(sdkMd.toBoc())[0];
+
+        // contractMain message format (txnContext.fc):
+        //   uint32 op | uint64 query_id | coins donationNanos | ref $md
+        await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(OPCODES.OP_SetPeer, 32)
+                .storeUint(0n, 64)
+                .storeCoins(0n)
+                .storeRef(mdCell)
+                .endCell(),
         });
     }
 }
