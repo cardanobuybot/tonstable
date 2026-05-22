@@ -1,0 +1,14 @@
+{
+  "status": "wired",
+  "ton": {
+    "oapp": "EQCauDCj8lkhYYs9LQqWJ6snD0Wguk-cwB3mmaQxlcxbbO5r",
+    "initialized": true,
+    "peer_set": { "dstEid": 40231, "peer": "0xAc997b1723b497Aa7694D4a402Dd34943df81B20" }
+  },
+  "arbitrum": {
+    "vault": "0xAc997b1723b497Aa7694D4a402Dd34943df81B20",
+    "peer_set": { "dstEid": 40343, "peer": "0x9ab830a3f25921618b3d2d0a9627ab270f45a0ba4f9cc01de699a43195cc5b6c" },
+    "tx": "0x5bfa1b29db8ed0274a9514e5640d177164b2e783ad163b9159c5736f4d280815"
+  },
+  "note": "Both peers set mutually. Bridge configured. Real cross-chain mint test pending."
+}
