@@ -12,8 +12,7 @@ tuple _executeOpcode(int op, cell $md) impure inline {
     if (op == TonstableOApp::OP::BRIDGE_MINT_REQUEST) {
         return handleBridgeMintRequest($md);
     } elseif (op == TonstableOApp::OP::BRIDGE_REDEEM_REQUEST) {
-        ;; TODO: encode + _lzSend
-        return empty_tuple();
+        return handleBridgeRedeemRequest($md);
     } else {
         return runOAppHandler(op, $md);
     }

@@ -14,7 +14,8 @@ const int TonstableOApp::OP::REDEEM_PAYOUT     = 0x544E5304;
 const int ARBITRUM_SEPOLIA_EID = 40231;
 
 ;; msgType for _lzSend enforced-options lookup (not the payload prefix)
-const int TonstableOApp::MSG_TYPE::BRIDGE_MINT = 1;
+const int TonstableOApp::MSG_TYPE::BRIDGE_MINT   = 1;
+const int TonstableOApp::MSG_TYPE::BRIDGE_REDEEM = 2;
 
 ;; ===== Error codes =====
 const int TonstableOApp::ERROR::invalidRequest = "invalidRequest"c & ERRORCODE_MASK;

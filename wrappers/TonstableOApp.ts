@@ -8,6 +8,7 @@ import {
     beginCell,
     contractAddress,
 } from '@ton/core';
+import type { SendMessageResult } from '@ton/sandbox';
 import { compile } from '@ton/blueprint';
 import {
     ClDeclareField,
@@ -26,6 +27,10 @@ const CONTROLLER_ADDR: bigint = addressToBigInt('EQAYlRK0qV4D1VqN7kl8NN3ghmO8xDg
 const MINTER_ADDR: bigint     = addressToBigInt('EQA31yC0LEgeshdze-eFQntYknWsFkZfYKPpIAi0XbGIhPKi');
 const TON_EID = 40343n;
 const BASE_LZ_RECEIVE_GAS = 100000n;
+
+// Opcodes the Minter sends to this OApp (interface.fc).
+const OP_BRIDGE_MINT_REQUEST   = 0x544e5310;
+const OP_BRIDGE_REDEEM_REQUEST = 0x544e5311;
 
 export interface TonstableOAppConfig {
     owner: Address;
@@ -122,5 +127,70 @@ export class TonstableOApp implements Contract {
                 .storeRef(mdCell)
                 .endCell(),
         });
+    }
+
+    // Mirrors the Minter's BridgeMintRequest. $md layout (handler.fc handleBridgeMintRequest):
+    //   [uint64 nonce][addr userTon][uint128 usdValue][uint128 minLusdOut][uint64 deadline]
+    // contractMain inbound body: uint32 op | uint64 query_id | coins donationNanos | ref $md.
+    async sendBridgeMintRequest(
+        provider: ContractProvider,
+        via: Sender,
+        opts: {
+            value: bigint;
+            nonce: bigint;
+            userTon: Address;
+            usdValue: bigint;
+            minLusdOut: bigint;
+            deadline: bigint;
+        },
+    ): Promise<SendMessageResult> {
+        const md = beginCell()
+            .storeUint(opts.nonce, 64)
+            .storeAddress(opts.userTon)
+            .storeUint(opts.usdValue, 128)
+            .storeUint(opts.minLusdOut, 128)
+            .storeUint(opts.deadline, 64)
+            .endCell();
+        return (await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(OP_BRIDGE_MINT_REQUEST, 32)
+                .storeUint(0n, 64)
+                .storeCoins(0n)
+                .storeRef(md)
+                .endCell(),
+        })) as unknown as SendMessageResult;
+    }
+
+    // Mirrors the Minter's BridgeRedeemRequest. $md layout (handler.fc handleBridgeRedeemRequest):
+    //   [uint64 nonce][addr userTon][uint128 tonstblBurned][uint64 deadline]
+    async sendBridgeRedeemRequest(
+        provider: ContractProvider,
+        via: Sender,
+        opts: {
+            value: bigint;
+            nonce: bigint;
+            userTon: Address;
+            tonstblBurned: bigint;
+            deadline: bigint;
+        },
+    ): Promise<SendMessageResult> {
+        const md = beginCell()
+            .storeUint(opts.nonce, 64)
+            .storeAddress(opts.userTon)
+            .storeUint(opts.tonstblBurned, 128)
+            .storeUint(opts.deadline, 64)
+            .endCell();
+        return (await provider.internal(via, {
+            value: opts.value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                .storeUint(OP_BRIDGE_REDEEM_REQUEST, 32)
+                .storeUint(0n, 64)
+                .storeCoins(0n)
+                .storeRef(md)
+                .endCell(),
+        })) as unknown as SendMessageResult;
     }
 }
