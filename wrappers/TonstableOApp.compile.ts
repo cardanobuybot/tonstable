@@ -9,6 +9,18 @@ const LZ_TON = path.resolve(
     '../arbitrum/lib/LayerZero-v2/packages/layerzero-v2/ton/src'
 );
 
+// Locally-vendored overrides of upstream LZ files: keyed by the "lz/"-relative
+// path, valued by our copy's absolute path. Used to ship a fix for the
+// BytesEncoder::serialize >=3-cell bug (drops the first cell) without forking
+// the whole classlib. The vendored file keeps the same logical include path,
+// so its own relative #includes still resolve against LZ_TON.
+const VENDORED: Record<string, string> = {
+    'lz/protocol/msglibs/BytesEncoder.fc': path.resolve(
+        __dirname,
+        '../contracts/oapp/lz/protocol/msglibs/BytesEncoder.fc',
+    ),
+};
+
 export const compile: CompilerConfig = {
     lang: 'func',
     targets: ['contracts/oapp/main.fc'],
@@ -22,6 +34,9 @@ export const compile: CompilerConfig = {
         // so they resolve correctly once the first file is found in LZ_TON.
         const lzPos = p.indexOf('/lz/');
         const resolved = lzPos !== -1 ? 'lz/' + p.slice(lzPos + 4) : p;
+        if (VENDORED[resolved]) {
+            return readFileSync(VENDORED[resolved], 'utf-8');
+        }
         return readFileSync(
             resolved.startsWith('lz/') ? path.join(LZ_TON, resolved.slice(3)) : resolved,
             'utf-8'
