@@ -23,7 +23,7 @@ import {
 const OAPP_NAME = asciiStringToBigint('tonstable'); // MAX_NAME_LEN=10
 // cl.t.address == cl.t.uint256 == 8 → both serialized as 256-bit storeUint (hash only, no workchain)
 const CONTROLLER_ADDR: bigint = addressToBigInt('EQAYlRK0qV4D1VqN7kl8NN3ghmO8xDgoGO84LLe3zfetaogF');
-const MINTER_ADDR: bigint     = addressToBigInt('EQAYNaqE6fdlxo2giEWWQU3QDHyxdN4atT9ixf8fAAy4XWth');
+const MINTER_ADDR: bigint     = addressToBigInt('EQA31yC0LEgeshdze-eFQntYknWsFkZfYKPpIAi0XbGIhPKi');
 const TON_EID = 40343n;
 const BASE_LZ_RECEIVE_GAS = 100000n;
 

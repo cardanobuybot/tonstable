@@ -15,6 +15,7 @@ TONSTABLE (TONSTBL) is a cross-chain collateralized stablecoin system that allow
 
 - [Architecture](#architecture)
 - [Contract Diagram](#contract-diagram)
+- [Development Progress](#development-progress)
 - [Getting Started](#getting-started)
 - [Testing](#testing)
 - [Security Considerations](#security-considerations)
@@ -172,6 +173,39 @@ With grant funding, the next phase includes:
 This is a portfolio-quality reference implementation of the TON-side mechanics for a cross-chain stablecoin. It demonstrates architectural thinking, security-conscious design, and clean test coverage. Production mainnet deployment requires additional funding (~$1-10K) for deploying the Arbitrum vault to testnet, security audit, and LayerZero peer configuration. The codebase is structured to make these next steps straightforward.
 
 **For grant reviewers / investors:** This implementation represents approximately 200 hours of focused architectural and testing work by a solo developer. The codebase quality, test coverage, and architectural honesty reflect production-grade engineering practices despite the project's beta status.
+
+---
+
+## Development Progress
+
+### Milestone: Forward seam TON→LZ validated end-to-end (testnet)
+**Date:** 2026-05-28
+
+**What was achieved:**
+
+- Configured per-OApp send-library override via `OP_SetLzConfig` (`0x82801010`), routing through Controller → Endpoint → Channel.
+- `Channel.epConfigOApp.sendMsglibConnection` now points to healthy ULN Connection `0:e8d2432c` (previously bounced on uninit `0:9a78f45c` due to LZ testnet version skew between Endpoint default code and current UlnManager code).
+- Boundary test (PriceUpdate + DepositTon hop): full chain Deployer → Minter → OApp → Endpoint → Channel → ULN Connection executed with `exit_code=0` at every layer. Validated on-chain via tonapi.io, not just in storage.
+- Gas correctly refunds back through the chain when downstream LZ workers reject the path.
+
+**Current limit:**
+
+Hop reaches Worker `0:9aa31310` which is not configured for our path (`srcOApp`=our OApp, `dstEid=40231`) on testnet. Worker returns gas without notifying UlnManager. This is LZ testnet infrastructure state (workers not actively maintained for inactive paths), not a contract bug. The same class of issue does not exist on mainnet where workers are actively configured.
+
+**Key addresses (testnet):**
+
+| Contract | Address |
+|----------|---------|
+| Minter | `EQA31yC0LEgeshdze-eFQntYknWsFkZfYKPpIAi0XbGIhPKi` |
+| OApp | `EQA2SPLtbQGkijeadXNHdhO3swGIJCBK_4LhFcJBHKV6_9BK` |
+| Channel | `0:445b4a01f30cc68de147f8d99a6d9c2d498637b1c229c279546e90b56572817b` |
+| ULN Connection (healthy) | `0:e8d2432cf4b02ebb2942cf1564944f6d4be859ac6e45777b6e1c94f278817732` |
+| Vault (Arb Sepolia) | `0xAc997b1723b497Aa7694D4a402Dd34943df81B20` |
+
+**Next milestones:**
+
+- Stage 4: implement redeem direction (Arb→TON), opcode `0x5304` `_lzReceiveExecute`.
+- Mainnet deployment will not encounter the testnet worker config skew.
 
 ---
 

@@ -6,7 +6,7 @@ import { TonstableOApp } from '../wrappers/TonstableOApp';
 //   EVM address arrives as uint256 = bytes32(uint256(uint160(addr))), right-aligned
 const ARB_VAULT_ADDR = '0xAc997b1723b497Aa7694D4a402Dd34943df81B20';
 const ARB_SEPOLIA_EID = 40231;
-const OAPP_ADDR = 'EQCauDCj8lkhYYs9LQqWJ6snD0Wguk-cwB3mmaQxlcxbbO5r';
+const OAPP_ADDR = 'EQA2SPLtbQGkijeadXNHdhO3swGIJCBK_4LhFcJBHKV6_9BK';
 
 export async function run(provider: NetworkProvider) {
     const oapp = provider.open(TonstableOApp.createFromAddress(Address.parse(OAPP_ADDR)));

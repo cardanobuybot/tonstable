@@ -2,7 +2,7 @@ import { NetworkProvider } from '@ton/blueprint';
 import { Address, toNano } from '@ton/core';
 import { TonstableOApp } from '../wrappers/TonstableOApp';
 
-const OAPP_ADDR = 'EQCauDCj8lkhYYs9LQqWJ6snD0Wguk-cwB3mmaQxlcxbbO5r';
+const OAPP_ADDR = 'EQA2SPLtbQGkijeadXNHdhO3swGIJCBK_4LhFcJBHKV6_9BK';
 
 export async function run(provider: NetworkProvider) {
     const oapp = provider.open(TonstableOApp.createFromAddress(Address.parse(OAPP_ADDR)));

@@ -25,10 +25,10 @@ contract SetPeerScript is Script {
     // LayerZero EID for TON testnet
     uint32 constant TON_EID = 40343;
 
-    // TON OApp bytes32 peer: Address.parse("EQCauDCj...").hash (256-bit hash, workchain dropped).
-    // Verified: BytesEncoder.fc store_uint256(srcOApp) puts this exact value in the LZ packet.
+    // TON OApp bytes32 peer: Address.parse("EQA2SPLtbQGkijeadXNHdhO3swGIJCBK_4LhFcJBHKV6_9BK").hash (256-bit hash, workchain dropped).
+    // Verified: Address.parse(...).hash.toString('hex') = 3648f2ed6d01a48a379a7573477613b7b3018824204aff82e115c2411ca57aff
     bytes32 constant TON_OAPP_PEER =
-        0x9ab830a3f25921618b3d2d0a9627ab270f45a0ba4f9cc01de699a43195cc5b6c;
+        0x3648f2ed6d01a48a379a7573477613b7b3018824204aff82e115c2411ca57aff;
 
     // Deployed TonstableVault on Arbitrum Sepolia
     address constant VAULT = 0xAc997b1723b497Aa7694D4a402Dd34943df81B20;
